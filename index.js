@@ -4,6 +4,10 @@ const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, SlashComm
 // Register slash commands
 const commands = [
     new SlashCommandBuilder()
+        .setName('setwelcome')
+        .setDescription('Set the welcome channel for this server')
+        .addChannelOption(option => option.setName('channel').setDescription('Welcome channel').setRequired(true)),
+    new SlashCommandBuilder()
         .setName('setupdb')
         .setDescription('Create all necessary database tables for StatusSync')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
@@ -67,6 +71,22 @@ const client = new Client({
 
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
+        // Set welcome channel
+        if (commandName === 'setwelcome') {
+            if (!interaction.member.permissions.has('Administrator')) {
+                await interaction.reply({ content: 'You need Administrator permission to set the welcome channel.', ephemeral: true });
+                return;
+            }
+            const channel = interaction.options.getChannel('channel');
+            if (!channel || channel.type !== 0) { // 0 = GUILD_TEXT
+                await interaction.reply({ content: 'Please select a text channel.', ephemeral: true });
+                return;
+            }
+            await db.query(`CREATE TABLE IF NOT EXISTS welcome_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+            await db.query('INSERT INTO welcome_channels (guild_id, channel_id) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2', [interaction.guild.id, channel.id]);
+            await interaction.reply(`Welcome channel set to <#${channel.id}>!`);
+            return;
+        }
         if (!interaction.isCommand()) return;
         const { commandName } = interaction;
 
@@ -151,10 +171,16 @@ const client = new Client({
             try {
                 const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
                 const userRep = result.rows.length ? result.rows[0].rep : 0;
+                // Calculate reps left for the requesting user
+                const now = new Date();
+                const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+                await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
+                const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [interaction.user.id, since]);
+                const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
                 const embed = {
                     color: 0x0099ff,
                     title: `${user.username}'s Reputation`,
-                    description: `Rep: **${userRep}**`,
+                    description: `Rep: **${userRep}**\nReps you can give in next 12h: **${repsLeft}**`,
                     thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
                 };
                 await interaction.reply({ embeds: [embed] });
@@ -217,10 +243,30 @@ client.once('clientReady', () => {
 
 // Welcome message
 client.on('guildMemberAdd', member => {
-    const channel = member.guild.systemChannel;
-    if (channel) {
-        channel.send(`Welcome to the server, ${member}!`);
-    }
+    // Find welcome channel from DB
+    (async () => {
+        await db.query(`CREATE TABLE IF NOT EXISTS welcome_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+        const res = await db.query('SELECT channel_id FROM welcome_channels WHERE guild_id = $1', [member.guild.id]);
+        let channel = null;
+        if (res.rows.length) {
+            channel = member.guild.channels.cache.get(res.rows[0].channel_id);
+        }
+        if (!channel) channel = member.guild.systemChannel;
+        if (!channel) return;
+        // Get rep
+        let userRep = 0;
+        try {
+            const repRes = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [member.id]);
+            userRep = repRes.rows.length ? repRes.rows[0].rep : 0;
+        } catch {}
+        const embed = {
+            color: 0x00bfff,
+            title: `Welcome, ${member.user.username}!`,
+            description: `<@${member.id}> joined the server!\nRep: **${userRep}**`,
+            thumbnail: { url: member.user.displayAvatarURL ? member.user.displayAvatarURL() : member.user.avatarURL },
+        };
+        channel.send({ content: `<@${member.id}> Welcome to the server!`, embeds: [embed] });
+    })();
 });
 
 
@@ -263,10 +309,16 @@ client.on('messageCreate', async (message) => {
         try {
             const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
             const userRep = result.rows.length ? result.rows[0].rep : 0;
+            // Calculate reps left for the requesting user
+            const now = new Date();
+            const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+            await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
+            const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [message.author.id, since]);
+            const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
             const embed = {
                 color: 0x0099ff,
                 title: `${user.username}'s Reputation`,
-                description: `Rep: **${userRep}**`,
+                description: `Rep: **${userRep}**\nReps you can give in next 12h: **${repsLeft}**`,
                 thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
             };
             message.channel.send({ embeds: [embed] });
