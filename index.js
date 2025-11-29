@@ -18,6 +18,10 @@ const commands = [
 ];
 
 async function registerSlashCommands() {
+    if (!process.env.CLIENT_ID) {
+        console.warn('CLIENT_ID is not set. Slash commands will not be registered.');
+        return;
+    }
     const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
     try {
         await rest.put(
@@ -30,7 +34,7 @@ async function registerSlashCommands() {
     }
 }
 
-if (process.env.BOT_TOKEN && process.env.CLIENT_ID) {
+if (process.env.BOT_TOKEN) {
     registerSlashCommands();
 }
 
