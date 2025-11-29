@@ -1,6 +1,86 @@
 
 require('dotenv').config();
-const { Client, GatewayIntentBits, Partials, Collection } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+// Register slash commands
+const commands = [
+    new SlashCommandBuilder()
+        .setName('setupdb')
+        .setDescription('Create all necessary database tables for StatusSync')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
+        .setName('rep')
+        .setDescription('Show your or another user\'s reputation')
+        .addUserOption(option => option.setName('user').setDescription('User to check').setRequired(false)),
+    new SlashCommandBuilder()
+        .setName('addrep')
+        .setDescription('Give reputation to a user')
+        .addUserOption(option => option.setName('user').setDescription('User to give rep to').setRequired(true)),
+];
+
+async function registerSlashCommands() {
+    const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
+    try {
+        await rest.put(
+            Routes.applicationCommands(process.env.CLIENT_ID),
+            { body: commands.map(cmd => cmd.toJSON()) }
+        );
+        console.log('Slash commands registered.');
+    } catch (err) {
+        console.error('Error registering slash commands:', err);
+    }
+}
+
+if (process.env.BOT_TOKEN && process.env.CLIENT_ID) {
+    registerSlashCommands();
+}
+// Slash command handler
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isChatInputCommand()) return;
+    if (interaction.commandName === 'setupdb') {
+        if (!interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) {
+            return interaction.reply({ content: 'You need Administrator permission to run this command.', ephemeral: true });
+        }
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS user_rep (
+                    user_id VARCHAR(32) PRIMARY KEY,
+                    rep INTEGER DEFAULT 0
+                );
+            `);
+            await interaction.reply('Database tables created or already exist!');
+        } catch (err) {
+            console.error(err);
+            await interaction.reply('Error creating tables: ' + err.message);
+        }
+        return;
+    }
+    if (interaction.commandName === 'rep') {
+        const user = interaction.options.getUser('user') || interaction.user;
+        try {
+            const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+            const userRep = result.rows.length ? result.rows[0].rep : 0;
+            await interaction.reply(`${user.username} has ${userRep} rep.`);
+        } catch (err) {
+            console.error(err);
+            await interaction.reply('Error fetching rep: ' + err.message);
+        }
+        return;
+    }
+    if (interaction.commandName === 'addrep') {
+        const user = interaction.options.getUser('user');
+        try {
+            await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, 1)
+                ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + 1`, [user.id]);
+            const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+            const newRep = result.rows.length ? result.rows[0].rep : 1;
+            await interaction.reply(`${user.username} now has ${newRep} rep!`);
+        } catch (err) {
+            console.error(err);
+            await interaction.reply('Error updating rep: ' + err.message);
+        }
+        return;
+    }
+});
 
 const db = require('./db');
 const rep = require('./rep');
