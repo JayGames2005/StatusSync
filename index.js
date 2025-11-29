@@ -211,14 +211,22 @@ const client = new Client({
             const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
             await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
             const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [interaction.user.id, since]);
-            if (parseInt(logRes.rows[0].count) >= 2) {
+            const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
+            if (repsLeft <= 0) {
                 await interaction.reply({ content: 'You can only give rep 2 times every 12 hours.', ephemeral: true });
+                return;
+            }
+            if (Math.abs(amount) > repsLeft) {
+                await interaction.reply({ content: `You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`, ephemeral: true });
                 return;
             }
             try {
                 await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2)
                     ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
-                await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [interaction.user.id, now]);
+                // Log each rep action separately (e.g. +2 counts as 2 actions)
+                for (let i = 0; i < Math.abs(amount); i++) {
+                    await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [interaction.user.id, now]);
+                }
                 const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
                 const newRep = result.rows.length ? result.rows[0].rep : amount;
                 const embed = {
@@ -347,13 +355,20 @@ client.on('messageCreate', async (message) => {
         const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
         await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
         const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [message.author.id, since]);
-        if (parseInt(logRes.rows[0].count) >= 2) {
+        const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
+        if (repsLeft <= 0) {
             return message.reply('You can only give rep 2 times every 12 hours.');
+        }
+        if (Math.abs(amount) > repsLeft) {
+            return message.reply(`You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`);
         }
         try {
             await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2)
                 ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
-            await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [message.author.id, now]);
+            // Log each rep action separately (e.g. +2 counts as 2 actions)
+            for (let i = 0; i < Math.abs(amount); i++) {
+                await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [message.author.id, now]);
+            }
             const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
             const newRep = result.rows.length ? result.rows[0].rep : amount;
             const embed = {
