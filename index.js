@@ -112,6 +112,7 @@ const client = new Client({
 
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
+    const { commandName } = interaction;
         if (commandName === 'repleaderboard') {
             // Show top 10 users by rep in this server
             try {
@@ -142,7 +143,6 @@ const client = new Client({
             return;
         }
         if (!interaction.isCommand()) return;
-        const { commandName } = interaction;
         // Set welcome channel
         if (commandName === 'setwelcome') {
             if (!interaction.member.permissions.has('Administrator')) {
