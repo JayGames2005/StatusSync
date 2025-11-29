@@ -15,6 +15,18 @@ const commands = [
         .setName('addrep')
         .setDescription('Give reputation to a user')
         .addUserOption(option => option.setName('user').setDescription('User to give rep to').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('addcmd')
+        .setDescription('Add a custom command')
+        .addStringOption(option => option.setName('name').setDescription('Command name').setRequired(true))
+        .addStringOption(option => option.setName('response').setDescription('Command response').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('removecmd')
+        .setDescription('Remove a custom command')
+        .addStringOption(option => option.setName('name').setDescription('Command name').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('listcmds')
+        .setDescription('List all custom commands'),
 ];
 
 async function registerSlashCommands() {
@@ -56,6 +68,57 @@ const client = new Client({
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isCommand()) return;
         const { commandName } = interaction;
+
+        // List custom commands
+        if (commandName === 'listcmds') {
+            const fs = require('fs');
+            const path = require('path');
+            const file = path.join(__dirname, 'custom_commands.json');
+            let cmds = {};
+            if (fs.existsSync(file)) {
+                cmds = JSON.parse(fs.readFileSync(file, 'utf8'));
+            }
+            const names = Object.keys(cmds);
+            if (names.length === 0) {
+                await interaction.reply('No custom commands found.');
+            } else {
+                await interaction.reply('Custom commands: ' + names.map(n => '`' + n + '`').join(', '));
+            }
+            return;
+        }
+
+        // Add custom command
+        if (commandName === 'addcmd') {
+            if (!interaction.member.permissions.has('Administrator')) {
+                await interaction.reply({ content: 'You need Administrator permission to add custom commands.', ephemeral: true });
+                return;
+            }
+            const name = interaction.options.getString('name').toLowerCase();
+            const response = interaction.options.getString('response');
+            customCommands.addCommand(name, response);
+            await interaction.reply(`Custom command /${name} added!`);
+            return;
+        }
+        // Remove custom command
+        if (commandName === 'removecmd') {
+            if (!interaction.member.permissions.has('Administrator')) {
+                await interaction.reply({ content: 'You need Administrator permission to remove custom commands.', ephemeral: true });
+                return;
+            }
+            const name = interaction.options.getString('name').toLowerCase();
+            const cmds = require('./custom_commands');
+            const allCmds = require('fs').existsSync(require('path').join(__dirname, 'custom_commands.json')) ? require('fs').readFileSync(require('path').join(__dirname, 'custom_commands.json'), 'utf8') : '{}';
+            if (!JSON.parse(allCmds)[name]) {
+                await interaction.reply({ content: `Custom command /${name} does not exist.`, ephemeral: true });
+                return;
+            }
+            // Remove command
+            const cmdsObj = JSON.parse(allCmds);
+            delete cmdsObj[name];
+            require('fs').writeFileSync(require('path').join(__dirname, 'custom_commands.json'), JSON.stringify(cmdsObj, null, 2));
+            await interaction.reply(`Custom command /${name} removed!`);
+            return;
+        }
 
         if (commandName === 'setupdb') {
             if (!interaction.member.permissions.has('Administrator')) {
