@@ -71,6 +71,8 @@ const client = new Client({
 
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
+        if (!interaction.isCommand()) return;
+        const { commandName } = interaction;
         // Set welcome channel
         if (commandName === 'setwelcome') {
             if (!interaction.member.permissions.has('Administrator')) {
@@ -87,8 +89,6 @@ const client = new Client({
             await interaction.reply(`Welcome channel set to <#${channel.id}>!`);
             return;
         }
-        if (!interaction.isCommand()) return;
-        const { commandName } = interaction;
 
         // List custom commands
         if (commandName === 'listcmds') {
