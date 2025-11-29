@@ -1,16 +1,3 @@
-        // Set rep card background color
-        if (commandName === 'setrepbg') {
-            const color = interaction.options.getString('color');
-            // Validate hex color
-            if (!/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.test(color)) {
-                await interaction.reply({ content: 'Please provide a valid hex color code (e.g. #7289da).', ephemeral: true });
-                return;
-            }
-            await db.query(`CREATE TABLE IF NOT EXISTS user_rep_settings (user_id VARCHAR(32) PRIMARY KEY, background_color VARCHAR(16))`);
-            await db.query('INSERT INTO user_rep_settings (user_id, background_color) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET background_color = $2', [interaction.user.id, color]);
-            await interaction.reply({ content: `Your rep card background color has been set to ${color}!`, ephemeral: true });
-            return;
-        }
 
 require('dotenv').config();
 const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
