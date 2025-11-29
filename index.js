@@ -58,6 +58,7 @@ if (process.env.BOT_TOKEN) {
 
 const db = require('./db');
 const rep = require('./rep');
+const { generateRepCard } = require('./repCard');
 
 const client = new Client({
     intents: [
@@ -169,10 +170,11 @@ const client = new Client({
         if (commandName === 'rep') {
             const user = interaction.options.getUser('user') || interaction.user;
             let displayName = user.username;
-            // Try to get display name if possible
+            let avatarURL = user.displayAvatarURL ? user.displayAvatarURL({ extension: 'png', size: 128 }) : user.avatarURL;
             if (interaction.guild) {
                 const member = await interaction.guild.members.fetch(user.id).catch(() => null);
                 if (member && member.displayName) displayName = member.displayName;
+                if (member && member.user && member.user.displayAvatarURL) avatarURL = member.user.displayAvatarURL({ extension: 'png', size: 128 });
             }
             try {
                 const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
@@ -183,13 +185,24 @@ const client = new Client({
                 await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
                 const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [interaction.user.id, since]);
                 const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
+                // Generate card image
+                const cardBuffer = await generateRepCard({
+                    displayName,
+                    avatarURL,
+                    rep: userRep,
+                    rank: 1, // Placeholder, implement rank logic if needed
+                    level: 1, // Placeholder, implement level logic if needed
+                    xp: 0, // Placeholder, implement XP logic if needed
+                    xpNeeded: 100 // Placeholder
+                });
+                const attachment = { attachment: cardBuffer, name: 'rep-card.png' };
                 const embed = {
                     color: 0x0099ff,
                     title: `${displayName}'s Reputation`,
                     description: `Rep: **${userRep}**\nReps you can give in next 12h: **${repsLeft}**`,
-                    thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
+                    image: { url: 'attachment://rep-card.png' }
                 };
-                await interaction.reply({ embeds: [embed] });
+                await interaction.reply({ embeds: [embed], files: [attachment] });
             } catch (err) {
                 console.error(err);
                 await interaction.reply({ content: 'Error fetching rep: ' + err.message, ephemeral: true });
