@@ -33,54 +33,7 @@ async function registerSlashCommands() {
 if (process.env.BOT_TOKEN && process.env.CLIENT_ID) {
     registerSlashCommands();
 }
-// Slash command handler
-client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
-    if (interaction.commandName === 'setupdb') {
-        if (!interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: 'You need Administrator permission to run this command.', ephemeral: true });
-        }
-        try {
-            await db.query(`
-                CREATE TABLE IF NOT EXISTS user_rep (
-                    user_id VARCHAR(32) PRIMARY KEY,
-                    rep INTEGER DEFAULT 0
-                );
-            `);
-            await interaction.reply('Database tables created or already exist!');
-        } catch (err) {
-            console.error(err);
-            await interaction.reply('Error creating tables: ' + err.message);
-        }
-        return;
-    }
-    if (interaction.commandName === 'rep') {
-        const user = interaction.options.getUser('user') || interaction.user;
-        try {
-            const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
-            const userRep = result.rows.length ? result.rows[0].rep : 0;
-            await interaction.reply(`${user.username} has ${userRep} rep.`);
-        } catch (err) {
-            console.error(err);
-            await interaction.reply('Error fetching rep: ' + err.message);
-        }
-        return;
-    }
-    if (interaction.commandName === 'addrep') {
-        const user = interaction.options.getUser('user');
-        try {
-            await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, 1)
-                ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + 1`, [user.id]);
-            const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
-            const newRep = result.rows.length ? result.rows[0].rep : 1;
-            await interaction.reply(`${user.username} now has ${newRep} rep!`);
-        } catch (err) {
-            console.error(err);
-            await interaction.reply('Error updating rep: ' + err.message);
-        }
-        return;
-    }
-});
+
 
 const db = require('./db');
 const rep = require('./rep');
