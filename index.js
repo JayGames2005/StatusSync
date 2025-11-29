@@ -32,6 +32,10 @@ const commands = [
     new SlashCommandBuilder()
         .setName('listcmds')
         .setDescription('List all custom commands'),
+    new SlashCommandBuilder()
+        .setName('setrepbg')
+        .setDescription('Set your rep card background color (hex code, e.g. #7289da)')
+        .addStringOption(option => option.setName('color').setDescription('Hex color code').setRequired(true)),
 ];
 
 async function registerSlashCommands() {
@@ -59,6 +63,26 @@ if (process.env.BOT_TOKEN) {
 const db = require('./db');
 const rep = require('./rep');
 const { generateRepCard } = require('./repCard');
+
+// Helper: get user's rep card background color
+async function getUserBgColor(userId) {
+    await db.query(`CREATE TABLE IF NOT EXISTS user_rep_settings (user_id VARCHAR(32) PRIMARY KEY, background_color VARCHAR(16))`);
+    const res = await db.query('SELECT background_color FROM user_rep_settings WHERE user_id = $1', [userId]);
+    return res.rows.length && res.rows[0].background_color ? res.rows[0].background_color : '#23272A';
+}
+    // Set rep card background color
+    if (commandName === 'setrepbg') {
+        const color = interaction.options.getString('color');
+        // Validate hex color
+        if (!/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.test(color)) {
+            await interaction.reply({ content: 'Please provide a valid hex color code (e.g. #7289da).', ephemeral: true });
+            return;
+        }
+        await db.query(`CREATE TABLE IF NOT EXISTS user_rep_settings (user_id VARCHAR(32) PRIMARY KEY, background_color VARCHAR(16))`);
+        await db.query('INSERT INTO user_rep_settings (user_id, background_color) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET background_color = $2', [interaction.user.id, color]);
+        await interaction.reply({ content: `Your rep card background color has been set to ${color}!`, ephemeral: true });
+        return;
+    }
 
 const client = new Client({
     intents: [
@@ -185,6 +209,8 @@ const client = new Client({
                 await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
                 const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [interaction.user.id, since]);
                 const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
+                // Get user background color
+                const bgColor = await getUserBgColor(user.id);
                 // Generate card image
                 const cardBuffer = await generateRepCard({
                     displayName,
@@ -193,7 +219,8 @@ const client = new Client({
                     rank: 1, // Placeholder, implement rank logic if needed
                     level: 1, // Placeholder, implement level logic if needed
                     xp: 0, // Placeholder, implement XP logic if needed
-                    xpNeeded: 100 // Placeholder
+                    xpNeeded: 100, // Placeholder
+                    bgColor
                 });
                 const attachment = { attachment: cardBuffer, name: 'rep-card.png' };
                 const embed = {
