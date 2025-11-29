@@ -58,20 +58,31 @@ client.on('messageCreate', async (message) => {
     const args = message.content.slice(1).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
-    // TODO: Update rep system to use PostgreSQL
     if (command === 'rep') {
         const user = message.mentions.users.first() || message.author;
-        // Placeholder: fetch rep from DB in future
-        const userRep = rep.getRep(user.id);
-        message.channel.send(`${user.username} has ${userRep} rep.`);
+        try {
+            const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+            const userRep = result.rows.length ? result.rows[0].rep : 0;
+            message.channel.send(`${user.username} has ${userRep} rep.`);
+        } catch (err) {
+            console.error(err);
+            message.channel.send('Error fetching rep: ' + err.message);
+        }
         return;
     }
     if (command === 'addrep') {
         if (!message.mentions.users.size) return message.reply('Mention a user to give rep!');
         const user = message.mentions.users.first();
-        // Placeholder: update rep in DB in future
-        const newRep = rep.addRep(user.id, 1);
-        message.channel.send(`${user.username} now has ${newRep} rep!`);
+        try {
+            await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, 1)
+                ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + 1`, [user.id]);
+            const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+            const newRep = result.rows.length ? result.rows[0].rep : 1;
+            message.channel.send(`${user.username} now has ${newRep} rep!`);
+        } catch (err) {
+            console.error(err);
+            message.channel.send('Error updating rep: ' + err.message);
+        }
         return;
     }
     if (command === 'addcmd') {
