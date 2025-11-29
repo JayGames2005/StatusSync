@@ -168,6 +168,12 @@ const client = new Client({
         }
         if (commandName === 'rep') {
             const user = interaction.options.getUser('user') || interaction.user;
+            let displayName = user.username;
+            // Try to get display name if possible
+            if (interaction.guild) {
+                const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+                if (member && member.displayName) displayName = member.displayName;
+            }
             try {
                 const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
                 const userRep = result.rows.length ? result.rows[0].rep : 0;
@@ -179,7 +185,7 @@ const client = new Client({
                 const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
                 const embed = {
                     color: 0x0099ff,
-                    title: `${user.username}'s Reputation`,
+                    title: `${displayName}'s Reputation`,
                     description: `Rep: **${userRep}**\nReps you can give in next 12h: **${repsLeft}**`,
                     thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
                 };
@@ -220,6 +226,11 @@ const client = new Client({
                 await interaction.reply({ content: `You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`, ephemeral: true });
                 return;
             }
+            let displayName = user.username;
+            if (interaction.guild) {
+                const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+                if (member && member.displayName) displayName = member.displayName;
+            }
             try {
                 await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2)
                     ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
@@ -231,7 +242,7 @@ const client = new Client({
                 const newRep = result.rows.length ? result.rows[0].rep : amount;
                 const embed = {
                     color: amount > 0 ? 0x00ff00 : 0xff0000,
-                    title: `${user.username} now has ${newRep} rep!`,
+                    title: `${displayName} now has ${newRep} rep!`,
                     description: `Rep change: ${amount > 0 ? '+' : ''}${amount}`,
                     thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
                 };
@@ -267,9 +278,11 @@ client.on('guildMemberAdd', member => {
             const repRes = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [member.id]);
             userRep = repRes.rows.length ? repRes.rows[0].rep : 0;
         } catch {}
+        // Use display name if available
+        let displayName = member.displayName || member.user.username;
         const embed = {
             color: 0x00bfff,
-            title: `Welcome, ${member.user.username}!`,
+            title: `Welcome, ${displayName}!`,
             description: `<@${member.id}> joined the server!\nRep: **${userRep}**`,
             thumbnail: { url: member.user.displayAvatarURL ? member.user.displayAvatarURL() : member.user.avatarURL },
         };
@@ -314,6 +327,11 @@ client.on('messageCreate', async (message) => {
     }
     if (command === 'rep') {
         const user = message.mentions.users.first() || message.author;
+        let displayName = user.username;
+        if (message.guild) {
+            const member = await message.guild.members.fetch(user.id).catch(() => null);
+            if (member && member.displayName) displayName = member.displayName;
+        }
         try {
             const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
             const userRep = result.rows.length ? result.rows[0].rep : 0;
@@ -325,7 +343,7 @@ client.on('messageCreate', async (message) => {
             const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
             const embed = {
                 color: 0x0099ff,
-                title: `${user.username}'s Reputation`,
+                title: `${displayName}'s Reputation`,
                 description: `Rep: **${userRep}**\nReps you can give in next 12h: **${repsLeft}**`,
                 thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
             };
@@ -362,6 +380,11 @@ client.on('messageCreate', async (message) => {
         if (Math.abs(amount) > repsLeft) {
             return message.reply(`You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`);
         }
+        let displayName = user.username;
+        if (message.guild) {
+            const member = await message.guild.members.fetch(user.id).catch(() => null);
+            if (member && member.displayName) displayName = member.displayName;
+        }
         try {
             await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2)
                 ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
@@ -373,7 +396,7 @@ client.on('messageCreate', async (message) => {
             const newRep = result.rows.length ? result.rows[0].rep : amount;
             const embed = {
                 color: amount > 0 ? 0x00ff00 : 0xff0000,
-                title: `${user.username} now has ${newRep} rep!`,
+                title: `${displayName} now has ${newRep} rep!`,
                 description: `Rep change: ${amount > 0 ? '+' : ''}${amount}`,
                 thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
             };
