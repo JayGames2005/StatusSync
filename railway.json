@@ -1,0 +1,16 @@
+{
+  "name": "StatusSync",
+  "description": "Discord bot with PostgreSQL for Railway deployment",
+  "repository": "https://github.com/JayGames2005/StatusSync.git",
+  "env": {
+    "BOT_TOKEN": {
+      "description": "Your Discord bot token",
+      "required": true
+    },
+    "DATABASE_URL": {
+      "description": "PostgreSQL connection string (provided by Railway)",
+      "required": true
+    }
+  },
+  "start": "node index.js"
+}
