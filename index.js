@@ -1,8 +1,39 @@
+// XP SYSTEM: Add XP on each message, weekly and all-time leaderboards, no level-up messages
+// Create tables if not exist
+async function ensureXpTables() {
+    await db.query(`CREATE TABLE IF NOT EXISTS user_xp (
+        user_id VARCHAR(32) PRIMARY KEY,
+        xp INTEGER DEFAULT 0
+    )`);
+    await db.query(`CREATE TABLE IF NOT EXISTS user_xp_weekly (
+        user_id VARCHAR(32) PRIMARY KEY,
+        xp INTEGER DEFAULT 0,
+        week_start DATE
+    )`);
+}
+
+// Helper to get start of current week (Monday 11am EST)
+function getCurrentWeekStart() {
+    const now = new Date();
+    // Convert to EST (UTC-5 or UTC-4 DST, but we use UTC-5 for simplicity)
+    const utc = new Date(now.getTime() + now.getTimezoneOffset() * 60000);
+    let est = new Date(utc.getTime() - (5 * 60 * 60 * 1000));
+    // Set to Monday 11am
+    est.setUTCHours(16, 0, 0, 0); // 11am EST = 16:00 UTC
+    est.setUTCDate(est.getUTCDate() - ((est.getUTCDay() + 6) % 7));
+    return est.toISOString().slice(0, 10); // YYYY-MM-DD
+}
 
 require('dotenv').config();
 const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 // Register slash commands
 const commands = [
+    new SlashCommandBuilder()
+        .setName('xpleaderboard')
+        .setDescription('Show the all-time XP leaderboard'),
+    new SlashCommandBuilder()
+        .setName('xpweekly')
+        .setDescription('Show the weekly XP leaderboard (resets every Monday 11am EST)'),
     new SlashCommandBuilder()
         .setName('repleaderboard')
         .setDescription('Show the top users with the highest reputation'),
@@ -112,6 +143,58 @@ const client = new Client({
 
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
+        if (commandName === 'xpleaderboard') {
+            try {
+                const members = await interaction.guild.members.fetch();
+                const res = await db.query('SELECT user_id, xp FROM user_xp ORDER BY xp DESC LIMIT 10');
+                if (!res.rows.length) {
+                    await interaction.reply('No XP data found.');
+                    return;
+                }
+                const leaderboard = await Promise.all(res.rows.map(async (row, i) => {
+                    let member = members.get(row.user_id);
+                    let name = member ? member.displayName : `<@${row.user_id}>`;
+                    return `#${i+1} - ${name}: **${row.xp} XP**`;
+                }));
+                const embed = {
+                    color: 0x3498db,
+                    title: 'All-Time XP Leaderboard',
+                    description: leaderboard.join('\n'),
+                };
+                await interaction.reply({ embeds: [embed] });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error fetching XP leaderboard: ' + err.message, ephemeral: true });
+            }
+            return;
+        }
+        if (commandName === 'xpweekly') {
+            try {
+                const members = await interaction.guild.members.fetch();
+                const weekStart = getCurrentWeekStart();
+                const res = await db.query('SELECT user_id, xp FROM user_xp_weekly WHERE week_start = $1 ORDER BY xp DESC LIMIT 10', [weekStart]);
+                if (!res.rows.length) {
+                    await interaction.reply('No weekly XP data found.');
+                    return;
+                }
+                const leaderboard = await Promise.all(res.rows.map(async (row, i) => {
+                    let member = members.get(row.user_id);
+                    let name = member ? member.displayName : `<@${row.user_id}>`;
+                    return `#${i+1} - ${name}: **${row.xp} XP**`;
+                }));
+                const embed = {
+                    color: 0x2ecc71,
+                    title: 'Weekly XP Leaderboard',
+                    description: leaderboard.join('\n'),
+                    footer: { text: 'Resets every Monday 11am EST' }
+                };
+                await interaction.reply({ embeds: [embed] });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error fetching weekly XP leaderboard: ' + err.message, ephemeral: true });
+            }
+            return;
+        }
     const { commandName } = interaction;
         if (commandName === 'repleaderboard') {
             // Show top 10 users by rep in this server
@@ -351,6 +434,75 @@ client.on('guildMemberAdd', member => {
 const customCommands = require('./custom_commands');
 
 client.on('messageCreate', async (message) => {
+    // XP SYSTEM: Add XP for every message (no level up messages)
+    if (!message.author.bot && message.guild) {
+        await ensureXpTables();
+        // All-time XP
+        await db.query('INSERT INTO user_xp (user_id, xp) VALUES ($1, 1) ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + 1', [message.author.id]);
+        // Weekly XP
+        const weekStart = getCurrentWeekStart();
+        const res = await db.query('SELECT week_start FROM user_xp_weekly WHERE user_id = $1', [message.author.id]);
+        if (!res.rows.length || res.rows[0].week_start !== weekStart) {
+            // New week or new user: reset
+            await db.query('INSERT INTO user_xp_weekly (user_id, xp, week_start) VALUES ($1, 1, $2) ON CONFLICT (user_id) DO UPDATE SET xp = 1, week_start = $2', [message.author.id, weekStart]);
+        } else {
+            await db.query('UPDATE user_xp_weekly SET xp = xp + 1 WHERE user_id = $1', [message.author.id]);
+        }
+    }
+    if (command === 'xpleaderboard') {
+        // All-time XP leaderboard
+        try {
+            const members = await message.guild.members.fetch();
+            const res = await db.query('SELECT user_id, xp FROM user_xp ORDER BY xp DESC LIMIT 10');
+            if (!res.rows.length) {
+                message.channel.send('No XP data found.');
+                return;
+            }
+            const leaderboard = await Promise.all(res.rows.map(async (row, i) => {
+                let member = members.get(row.user_id);
+                let name = member ? member.displayName : `<@${row.user_id}>`;
+                return `#${i+1} - ${name}: **${row.xp} XP**`;
+            }));
+            const embed = {
+                color: 0x3498db,
+                title: 'All-Time XP Leaderboard',
+                description: leaderboard.join('\n'),
+            };
+            message.channel.send({ embeds: [embed] });
+        } catch (err) {
+            console.error(err);
+            message.channel.send('Error fetching XP leaderboard: ' + err.message);
+        }
+        return;
+    }
+    if (command === 'xpweekly') {
+        // Weekly XP leaderboard
+        try {
+            const members = await message.guild.members.fetch();
+            const weekStart = getCurrentWeekStart();
+            const res = await db.query('SELECT user_id, xp FROM user_xp_weekly WHERE week_start = $1 ORDER BY xp DESC LIMIT 10', [weekStart]);
+            if (!res.rows.length) {
+                message.channel.send('No weekly XP data found.');
+                return;
+            }
+            const leaderboard = await Promise.all(res.rows.map(async (row, i) => {
+                let member = members.get(row.user_id);
+                let name = member ? member.displayName : `<@${row.user_id}>`;
+                return `#${i+1} - ${name}: **${row.xp} XP**`;
+            }));
+            const embed = {
+                color: 0x2ecc71,
+                title: 'Weekly XP Leaderboard',
+                description: leaderboard.join('\n'),
+                footer: { text: 'Resets every Monday 11am EST' }
+            };
+            message.channel.send({ embeds: [embed] });
+        } catch (err) {
+            console.error(err);
+            message.channel.send('Error fetching weekly XP leaderboard: ' + err.message);
+        }
+        return;
+    }
     if (command === 'repleaderboard') {
         try {
             const members = await message.guild.members.fetch();
