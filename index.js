@@ -4,6 +4,9 @@ const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, SlashComm
 // Register slash commands
 const commands = [
     new SlashCommandBuilder()
+        .setName('repleaderboard')
+        .setDescription('Show the top users with the highest reputation'),
+    new SlashCommandBuilder()
         .setName('setwelcome')
         .setDescription('Set the welcome channel for this server')
         .addChannelOption(option => option.setName('channel').setDescription('Welcome channel').setRequired(true)),
@@ -109,6 +112,35 @@ const client = new Client({
 
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
+        if (commandName === 'repleaderboard') {
+            // Show top 10 users by rep in this server
+            try {
+                // Get all members in the guild
+                const members = await interaction.guild.members.fetch();
+                // Get top 10 rep users from DB
+                const res = await db.query('SELECT user_id, rep FROM user_rep ORDER BY rep DESC LIMIT 10');
+                if (!res.rows.length) {
+                    await interaction.reply('No reputation data found.');
+                    return;
+                }
+                // Map user IDs to display names (or mention if not found)
+                const leaderboard = await Promise.all(res.rows.map(async (row, i) => {
+                    let member = members.get(row.user_id);
+                    let name = member ? member.displayName : `<@${row.user_id}>`;
+                    return `#${i+1} - ${name}: **${row.rep}**`;
+                }));
+                const embed = {
+                    color: 0xf1c40f,
+                    title: 'Rep Leaderboard',
+                    description: leaderboard.join('\n'),
+                };
+                await interaction.reply({ embeds: [embed] });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error fetching leaderboard: ' + err.message, ephemeral: true });
+            }
+            return;
+        }
         if (!interaction.isCommand()) return;
         const { commandName } = interaction;
         // Set welcome channel
@@ -319,6 +351,31 @@ client.on('guildMemberAdd', member => {
 const customCommands = require('./custom_commands');
 
 client.on('messageCreate', async (message) => {
+    if (command === 'repleaderboard') {
+        try {
+            const members = await message.guild.members.fetch();
+            const res = await db.query('SELECT user_id, rep FROM user_rep ORDER BY rep DESC LIMIT 10');
+            if (!res.rows.length) {
+                message.channel.send('No reputation data found.');
+                return;
+            }
+            const leaderboard = await Promise.all(res.rows.map(async (row, i) => {
+                let member = members.get(row.user_id);
+                let name = member ? member.displayName : `<@${row.user_id}>`;
+                return `#${i+1} - ${name}: **${row.rep}**`;
+            }));
+            const embed = {
+                color: 0xf1c40f,
+                title: 'Rep Leaderboard',
+                description: leaderboard.join('\n'),
+            };
+            message.channel.send({ embeds: [embed] });
+        } catch (err) {
+            console.error(err);
+            message.channel.send('Error fetching leaderboard: ' + err.message);
+        }
+        return;
+    }
     if (message.author.bot || !message.guild) return;
     if (!message.content.startsWith('!')) return;
     const args = message.content.slice(1).trim().split(/ +/);
