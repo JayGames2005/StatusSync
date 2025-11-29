@@ -54,7 +54,7 @@ const client = new Client({
 
 client.commands = new Collection();
 
-client.once('ready', () => {
+client.once('clientReady', () => {
     console.log(`Logged in as ${client.user.tag}`);
 });
 
