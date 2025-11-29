@@ -34,8 +34,21 @@ const commands = [
         .setDescription('List all custom commands'),
     new SlashCommandBuilder()
         .setName('setrepbg')
-        .setDescription('Set your rep card background color (hex code, e.g. #7289da)')
-        .addStringOption(option => option.setName('color').setDescription('Hex color code').setRequired(true)),
+        .setDescription('Set your rep card background color (choose a color)')
+        .addStringOption(option =>
+            option.setName('color')
+                .setDescription('Background color')
+                .setRequired(true)
+                .addChoices(
+                    { name: 'Blue', value: 'blue' },
+                    { name: 'Red', value: 'red' },
+                    { name: 'Black', value: 'black' },
+                    { name: 'White', value: 'white' },
+                    { name: 'Green', value: 'green' },
+                    { name: 'Purple', value: 'purple' },
+                    { name: 'Orange', value: 'orange' }
+                )
+        ),
 ];
 
 async function registerSlashCommands() {
@@ -68,7 +81,19 @@ const { generateRepCard } = require('./repCard');
 async function getUserBgColor(userId) {
     await db.query(`CREATE TABLE IF NOT EXISTS user_rep_settings (user_id VARCHAR(32) PRIMARY KEY, background_color VARCHAR(16))`);
     const res = await db.query('SELECT background_color FROM user_rep_settings WHERE user_id = $1', [userId]);
-    return res.rows.length && res.rows[0].background_color ? res.rows[0].background_color : '#23272A';
+    const colorMap = {
+        blue: '#3498db',
+        red: '#e74c3c',
+        black: '#23272A',
+        white: '#ecf0f1',
+        green: '#2ecc71',
+        purple: '#9b59b6',
+        orange: '#e67e22'
+    };
+    if (res.rows.length && res.rows[0].background_color && colorMap[res.rows[0].background_color]) {
+        return colorMap[res.rows[0].background_color];
+    }
+    return '#23272A'; // default black
 }
     // Set rep card background color
 
@@ -154,29 +179,16 @@ const client = new Client({
             return;
         }
 
-        if (commandName === 'setupdb') {
-            if (!interaction.member.permissions.has('Administrator')) {
-                await interaction.reply({ content: 'You need Administrator permission to run this command.', ephemeral: true });
+        if (commandName === 'setrepbg') {
+            const color = interaction.options.getString('color');
+            const allowed = ['blue', 'red', 'black', 'white', 'green', 'purple', 'orange'];
+            if (!allowed.includes(color)) {
+                await interaction.reply({ content: 'Invalid color. Please choose from the provided options.', ephemeral: true });
                 return;
             }
-            try {
-                await db.query(`
-                    CREATE TABLE IF NOT EXISTS user_rep (
-                        user_id VARCHAR(32) PRIMARY KEY,
-                        rep INTEGER DEFAULT 0
-                    );
-                `);
-                await db.query(`
-                    CREATE TABLE IF NOT EXISTS custom_commands (
-                        name VARCHAR(64) PRIMARY KEY,
-                        response TEXT NOT NULL
-                    );
-                `);
-                await interaction.reply('Database tables (user_rep, custom_commands) created or already exist!');
-            } catch (err) {
-                console.error(err);
-                await interaction.reply({ content: 'Error creating tables: ' + err.message, ephemeral: true });
-            }
+            await db.query(`CREATE TABLE IF NOT EXISTS user_rep_settings (user_id VARCHAR(32) PRIMARY KEY, background_color VARCHAR(16))`);
+            await db.query('INSERT INTO user_rep_settings (user_id, background_color) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET background_color = $2', [interaction.user.id, color]);
+            await interaction.reply({ content: `Your rep card background color has been set to ${color}!`, ephemeral: true });
             return;
         }
         if (commandName === 'rep') {
