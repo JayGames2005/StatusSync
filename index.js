@@ -14,7 +14,8 @@ const commands = [
     new SlashCommandBuilder()
         .setName('addrep')
         .setDescription('Give reputation to a user')
-        .addUserOption(option => option.setName('user').setDescription('User to give rep to').setRequired(true)),
+        .addUserOption(option => option.setName('user').setDescription('User to give rep to').setRequired(true))
+        .addIntegerOption(option => option.setName('amount').setDescription('Amount (+1, -1, +2, -2)').setRequired(false)),
     new SlashCommandBuilder()
         .setName('addcmd')
         .setDescription('Add a custom command')
@@ -150,7 +151,13 @@ const client = new Client({
             try {
                 const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
                 const userRep = result.rows.length ? result.rows[0].rep : 0;
-                await interaction.reply(`${user.username} has ${userRep} rep.`);
+                const embed = {
+                    color: 0x0099ff,
+                    title: `${user.username}'s Reputation`,
+                    description: `Rep: **${userRep}**`,
+                    thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
+                };
+                await interaction.reply({ embeds: [embed] });
             } catch (err) {
                 console.error(err);
                 await interaction.reply({ content: 'Error fetching rep: ' + err.message, ephemeral: true });
@@ -159,16 +166,42 @@ const client = new Client({
         }
         if (commandName === 'addrep') {
             const user = interaction.options.getUser('user');
+            const amount = interaction.options.getInteger('amount') ?? 1;
+            const validAmounts = [1, -1, 2, -2];
             if (!user) {
                 await interaction.reply({ content: 'You must specify a user to give rep to!', ephemeral: true });
                 return;
             }
+            if (!validAmounts.includes(amount)) {
+                await interaction.reply({ content: 'Amount must be one of: 1, -1, 2, -2', ephemeral: true });
+                return;
+            }
+            if (user.id === interaction.user.id) {
+                await interaction.reply({ content: 'You cannot rep yourself!', ephemeral: true });
+                return;
+            }
+            // Limit: 2 rep actions per 12 hours
+            const now = new Date();
+            const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+            await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
+            const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [interaction.user.id, since]);
+            if (parseInt(logRes.rows[0].count) >= 2) {
+                await interaction.reply({ content: 'You can only give rep 2 times every 12 hours.', ephemeral: true });
+                return;
+            }
             try {
-                await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, 1)
-                    ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + 1`, [user.id]);
+                await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2)
+                    ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
+                await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [interaction.user.id, now]);
                 const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
-                const newRep = result.rows.length ? result.rows[0].rep : 1;
-                await interaction.reply(`${user.username} now has ${newRep} rep!`);
+                const newRep = result.rows.length ? result.rows[0].rep : amount;
+                const embed = {
+                    color: amount > 0 ? 0x00ff00 : 0xff0000,
+                    title: `${user.username} now has ${newRep} rep!`,
+                    description: `Rep change: ${amount > 0 ? '+' : ''}${amount}`,
+                    thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
+                };
+                await interaction.reply({ embeds: [embed] });
             } catch (err) {
                 console.error(err);
                 await interaction.reply({ content: 'Error updating rep: ' + err.message, ephemeral: true });
@@ -230,7 +263,13 @@ client.on('messageCreate', async (message) => {
         try {
             const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
             const userRep = result.rows.length ? result.rows[0].rep : 0;
-            message.channel.send(`${user.username} has ${userRep} rep.`);
+            const embed = {
+                color: 0x0099ff,
+                title: `${user.username}'s Reputation`,
+                description: `Rep: **${userRep}**`,
+                thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
+            };
+            message.channel.send({ embeds: [embed] });
         } catch (err) {
             console.error(err);
             message.channel.send('Error fetching rep: ' + err.message);
@@ -240,12 +279,38 @@ client.on('messageCreate', async (message) => {
     if (command === 'addrep') {
         if (!message.mentions.users.size) return message.reply('Mention a user to give rep!');
         const user = message.mentions.users.first();
+        let amount = 1;
+        if (args.length && /^[-+]?\d+$/.test(args[0])) {
+            amount = parseInt(args.shift(), 10);
+        }
+        const validAmounts = [1, -1, 2, -2];
+        if (!validAmounts.includes(amount)) {
+            return message.reply('Amount must be one of: 1, -1, 2, -2');
+        }
+        if (user.id === message.author.id) {
+            return message.reply('You cannot rep yourself!');
+        }
+        // Limit: 2 rep actions per 12 hours
+        const now = new Date();
+        const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+        await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
+        const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [message.author.id, since]);
+        if (parseInt(logRes.rows[0].count) >= 2) {
+            return message.reply('You can only give rep 2 times every 12 hours.');
+        }
         try {
-            await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, 1)
-                ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + 1`, [user.id]);
+            await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2)
+                ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
+            await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [message.author.id, now]);
             const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
-            const newRep = result.rows.length ? result.rows[0].rep : 1;
-            message.channel.send(`${user.username} now has ${newRep} rep!`);
+            const newRep = result.rows.length ? result.rows[0].rep : amount;
+            const embed = {
+                color: amount > 0 ? 0x00ff00 : 0xff0000,
+                title: `${user.username} now has ${newRep} rep!`,
+                description: `Rep change: ${amount > 0 ? '+' : ''}${amount}`,
+                thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
+            };
+            message.channel.send({ embeds: [embed] });
         } catch (err) {
             console.error(err);
             message.channel.send('Error updating rep: ' + err.message);
