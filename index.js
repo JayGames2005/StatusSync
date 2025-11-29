@@ -67,6 +67,11 @@ client.on('guildMemberAdd', member => {
 const customCommands = require('./custom_commands');
 
 client.on('messageCreate', async (message) => {
+    if (message.author.bot || !message.guild) return;
+    if (!message.content.startsWith('!')) return;
+    const args = message.content.slice(1).trim().split(/ +/);
+    const command = args.shift().toLowerCase();
+
     if (command === 'setupdb') {
         // Only allow server owner or admins to run this
         if (!message.member.permissions.has('Administrator')) {
@@ -86,11 +91,6 @@ client.on('messageCreate', async (message) => {
         }
         return;
     }
-    if (message.author.bot || !message.guild) return;
-    if (!message.content.startsWith('!')) return;
-    const args = message.content.slice(1).trim().split(/ +/);
-    const command = args.shift().toLowerCase();
-
     if (command === 'rep') {
         const user = message.mentions.users.first() || message.author;
         try {
