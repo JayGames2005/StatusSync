@@ -132,7 +132,13 @@ const client = new Client({
                         rep INTEGER DEFAULT 0
                     );
                 `);
-                await interaction.reply('Database tables created or already exist!');
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS custom_commands (
+                        name VARCHAR(64) PRIMARY KEY,
+                        response TEXT NOT NULL
+                    );
+                `);
+                await interaction.reply('Database tables (user_rep, custom_commands) created or already exist!');
             } catch (err) {
                 console.error(err);
                 await interaction.reply({ content: 'Error creating tables: ' + err.message, ephemeral: true });
@@ -206,7 +212,13 @@ client.on('messageCreate', async (message) => {
                     rep INTEGER DEFAULT 0
                 );
             `);
-            message.channel.send('Database tables created or already exist!');
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS custom_commands (
+                    name VARCHAR(64) PRIMARY KEY,
+                    response TEXT NOT NULL
+                );
+            `);
+            message.channel.send('Database tables (user_rep, custom_commands) created or already exist!');
         } catch (err) {
             console.error(err);
             message.channel.send('Error creating tables: ' + err.message);
