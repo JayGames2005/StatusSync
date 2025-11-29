@@ -114,7 +114,7 @@ const client = new Client({
         // Set welcome channel
         if (commandName === 'setwelcome') {
             if (!interaction.member.permissions.has('Administrator')) {
-                await interaction.reply({ content: 'You need Administrator permission to set the welcome channel.', ephemeral: true });
+                await interaction.reply({ content: 'You need Administrator permission to set the welcome channel.', flags: 64 });
                 return;
             }
             const channel = interaction.options.getChannel('channel');
@@ -149,7 +149,7 @@ const client = new Client({
         // Add custom command
         if (commandName === 'addcmd') {
             if (!interaction.member.permissions.has('Administrator')) {
-                await interaction.reply({ content: 'You need Administrator permission to add custom commands.', ephemeral: true });
+                await interaction.reply({ content: 'You need Administrator permission to add custom commands.', flags: 64 });
                 return;
             }
             const name = interaction.options.getString('name').toLowerCase();
@@ -161,7 +161,7 @@ const client = new Client({
         // Remove custom command
         if (commandName === 'removecmd') {
             if (!interaction.member.permissions.has('Administrator')) {
-                await interaction.reply({ content: 'You need Administrator permission to remove custom commands.', ephemeral: true });
+                await interaction.reply({ content: 'You need Administrator permission to remove custom commands.', flags: 64 });
                 return;
             }
             const name = interaction.options.getString('name').toLowerCase();
@@ -183,12 +183,12 @@ const client = new Client({
             const color = interaction.options.getString('color');
             const allowed = ['blue', 'red', 'black', 'white', 'green', 'purple', 'orange'];
             if (!allowed.includes(color)) {
-                await interaction.reply({ content: 'Invalid color. Please choose from the provided options.', ephemeral: true });
+                await interaction.reply({ content: 'Invalid color. Please choose from the provided options.', flags: 64 });
                 return;
             }
             await db.query(`CREATE TABLE IF NOT EXISTS user_rep_settings (user_id VARCHAR(32) PRIMARY KEY, background_color VARCHAR(16))`);
             await db.query('INSERT INTO user_rep_settings (user_id, background_color) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET background_color = $2', [interaction.user.id, color]);
-            await interaction.reply({ content: `Your rep card background color has been set to ${color}!`, ephemeral: true });
+            await interaction.reply({ content: `Your rep card background color has been set to ${color}!`, flags: 64 });
             return;
         }
         if (commandName === 'rep') {
