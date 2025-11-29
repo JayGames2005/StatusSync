@@ -1,3 +1,58 @@
+// Handle slash commands
+client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isCommand()) return;
+    const { commandName } = interaction;
+
+    if (commandName === 'setupdb') {
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({ content: 'You need Administrator permission to run this command.', ephemeral: true });
+            return;
+        }
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS user_rep (
+                    user_id VARCHAR(32) PRIMARY KEY,
+                    rep INTEGER DEFAULT 0
+                );
+            `);
+            await interaction.reply('Database tables created or already exist!');
+        } catch (err) {
+            console.error(err);
+            await interaction.reply({ content: 'Error creating tables: ' + err.message, ephemeral: true });
+        }
+        return;
+    }
+    if (commandName === 'rep') {
+        const user = interaction.options.getUser('user') || interaction.user;
+        try {
+            const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+            const userRep = result.rows.length ? result.rows[0].rep : 0;
+            await interaction.reply(`${user.username} has ${userRep} rep.`);
+        } catch (err) {
+            console.error(err);
+            await interaction.reply({ content: 'Error fetching rep: ' + err.message, ephemeral: true });
+        }
+        return;
+    }
+    if (commandName === 'addrep') {
+        const user = interaction.options.getUser('user');
+        if (!user) {
+            await interaction.reply({ content: 'You must specify a user to give rep to!', ephemeral: true });
+            return;
+        }
+        try {
+            await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, 1)
+                ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + 1`, [user.id]);
+            const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+            const newRep = result.rows.length ? result.rows[0].rep : 1;
+            await interaction.reply(`${user.username} now has ${newRep} rep!`);
+        } catch (err) {
+            console.error(err);
+            await interaction.reply({ content: 'Error updating rep: ' + err.message, ephemeral: true });
+        }
+        return;
+    }
+});
 
 require('dotenv').config();
 const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
