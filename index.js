@@ -29,6 +29,13 @@ const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, SlashComm
 // Register slash commands
 const commands = [
     new SlashCommandBuilder()
+        .setName('setstarboard')
+        .setDescription('Configure the starboard channel, emoji, and threshold')
+        .addChannelOption(option => option.setName('channel').setDescription('Starboard channel').setRequired(true))
+        .addStringOption(option => option.setName('emoji').setDescription('Emoji to use (default: ⭐)').setRequired(false))
+        .addIntegerOption(option => option.setName('threshold').setDescription('Reactions needed (default: 3)').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
         .setName('teststarboard')
         .setDescription('Admin: Test the starboard by reposting a message to #starboard')
         .addStringOption(option => option.setName('message').setDescription('Message link or ID').setRequired(true))
@@ -148,6 +155,24 @@ const client = new Client({
 
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
+        // /setstarboard command (admin only)
+        if (commandName === 'setstarboard') {
+            if (!interaction.member.permissions.has('Administrator')) {
+                await interaction.reply({ content: 'You need Administrator permission to use this command.', flags: 64 });
+                return;
+            }
+            const channel = interaction.options.getChannel('channel');
+            const emoji = interaction.options.getString('emoji') || '⭐';
+            const threshold = interaction.options.getInteger('threshold') || 3;
+            if (!channel.isTextBased || !channel.isTextBased()) {
+                await interaction.reply({ content: 'Please select a text channel.', flags: 64 });
+                return;
+            }
+            await db.query(`CREATE TABLE IF NOT EXISTS starboard_settings (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32), emoji TEXT, threshold INTEGER)`);
+            await db.query('INSERT INTO starboard_settings (guild_id, channel_id, emoji, threshold) VALUES ($1, $2, $3, $4) ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2, emoji = $3, threshold = $4', [interaction.guild.id, channel.id, emoji, threshold]);
+            await interaction.reply({ content: `Starboard configured! Channel: <#${channel.id}>, Emoji: ${emoji}, Threshold: ${threshold}`, flags: 64 });
+            return;
+        }
     const { commandName } = interaction;
     // /teststarboard command (admin only)
     if (commandName === 'teststarboard') {
@@ -466,20 +491,23 @@ client.commands = new Collection();
 // --- STARBOARD FEATURE ---
 client.on('messageReactionAdd', async (reaction, user) => {
     try {
-        // Only care about the star emoji
-        if (reaction.emoji.name !== '⭐') return;
         // Only in guilds
         if (!reaction.message.guild) return;
         // Fetch full reaction/message if partial
         if (reaction.partial) await reaction.fetch();
         if (reaction.message.partial) await reaction.message.fetch();
+        // Get starboard settings from DB
+        await db.query(`CREATE TABLE IF NOT EXISTS starboard_settings (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32), emoji TEXT, threshold INTEGER)`);
+        const settingsRes = await db.query('SELECT * FROM starboard_settings WHERE guild_id = $1', [reaction.message.guild.id]);
+        if (!settingsRes.rows.length) return;
+        const { channel_id, emoji, threshold } = settingsRes.rows[0];
+        // Only care about the configured emoji
+        if (reaction.emoji.name !== emoji) return;
         // Only trigger when threshold is met
-        if (reaction.count < 3) return;
-        // Find or create #starboard channel
-        let starboard = reaction.message.guild.channels.cache.find(
-            ch => ch.name === 'starboard' && ch.isTextBased && ch.isTextBased()
-        );
-        if (!starboard) return; // Don't post if no channel
+        if (reaction.count < threshold) return;
+        // Find the configured starboard channel
+        let starboard = reaction.message.guild.channels.cache.get(channel_id);
+        if (!starboard || !starboard.isTextBased || !starboard.isTextBased()) return;
         // Prevent duplicate posts (by checking if already posted)
         const fetched = await starboard.messages.fetch({ limit: 100 });
         if (fetched.some(m => m.embeds[0]?.footer?.text?.includes(reaction.message.id))) return;
@@ -494,7 +522,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
             fields: [
                 { name: 'Jump to Message', value: `[Go to message](${reaction.message.url})` }
             ],
-            footer: { text: `⭐ ${reaction.count} | ${reaction.message.id}` },
+            footer: { text: `${emoji} ${reaction.count} | ${reaction.message.id}` },
             timestamp: new Date(reaction.message.createdTimestamp)
         };
         // Attach image if present
