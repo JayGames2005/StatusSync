@@ -434,20 +434,21 @@ client.on('guildMemberAdd', member => {
 const customCommands = require('./custom_commands');
 
 client.on('messageCreate', async (message) => {
+    if (message.author.bot || !message.guild) return;
+    if (!message.content.startsWith('!')) return;
+    const args = message.content.slice(1).trim().split(/ +/);
+    const command = args.shift().toLowerCase();
     // XP SYSTEM: Add XP for every message (no level up messages)
-    if (!message.author.bot && message.guild) {
-        await ensureXpTables();
-        // All-time XP
-        await db.query('INSERT INTO user_xp (user_id, xp) VALUES ($1, 1) ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + 1', [message.author.id]);
-        // Weekly XP
-        const weekStart = getCurrentWeekStart();
-        const res = await db.query('SELECT week_start FROM user_xp_weekly WHERE user_id = $1', [message.author.id]);
-        if (!res.rows.length || res.rows[0].week_start !== weekStart) {
-            // New week or new user: reset
-            await db.query('INSERT INTO user_xp_weekly (user_id, xp, week_start) VALUES ($1, 1, $2) ON CONFLICT (user_id) DO UPDATE SET xp = 1, week_start = $2', [message.author.id, weekStart]);
-        } else {
-            await db.query('UPDATE user_xp_weekly SET xp = xp + 1 WHERE user_id = $1', [message.author.id]);
-        }
+    await ensureXpTables();
+    await db.query('INSERT INTO user_xp (user_id, xp) VALUES ($1, 1) ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + 1', [message.author.id]);
+    // Weekly XP
+    const weekStart = getCurrentWeekStart();
+    const res = await db.query('SELECT week_start FROM user_xp_weekly WHERE user_id = $1', [message.author.id]);
+    if (!res.rows.length || res.rows[0].week_start !== weekStart) {
+        // New week or new user: reset
+        await db.query('INSERT INTO user_xp_weekly (user_id, xp, week_start) VALUES ($1, 1, $2) ON CONFLICT (user_id) DO UPDATE SET xp = 1, week_start = $2', [message.author.id, weekStart]);
+    } else {
+        await db.query('UPDATE user_xp_weekly SET xp = xp + 1 WHERE user_id = $1', [message.author.id]);
     }
     if (command === 'xpleaderboard') {
         // All-time XP leaderboard
@@ -530,8 +531,7 @@ client.on('messageCreate', async (message) => {
     }
     if (message.author.bot || !message.guild) return;
     if (!message.content.startsWith('!')) return;
-    const args = message.content.slice(1).trim().split(/ +/);
-    const command = args.shift().toLowerCase();
+    // ...existing code...
 
     if (command === 'setupdb') {
         // Only allow server owner or admins to run this
