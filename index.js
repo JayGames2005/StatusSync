@@ -200,11 +200,24 @@ const client = new Client({
                 if (!channel || !channel.isTextBased || !channel.isTextBased()) throw new Error('Channel not found or not text-based');
                 const msg = await channel.messages.fetch(messageId);
                 if (!msg) throw new Error('Message not found');
-                // Find #starboard
-                let starboard = interaction.guild.channels.cache.find(
-                    ch => ch.name === 'starboard' && ch.isTextBased && ch.isTextBased()
-                );
-                if (!starboard) throw new Error('No #starboard channel found');
+                // Get starboard settings from DB
+                await db.query(`CREATE TABLE IF NOT EXISTS starboard_settings (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32), emoji TEXT, threshold INTEGER)`);
+                const settingsRes = await db.query('SELECT * FROM starboard_settings WHERE guild_id = $1', [interaction.guild.id]);
+                if (!settingsRes.rows.length) throw new Error('No starboard settings found');
+                const { channel_id, emoji, threshold } = settingsRes.rows[0];
+                // Find the configured starboard channel
+                let starboard = interaction.guild.channels.cache.get(channel_id);
+                // Debug: log channel info
+                console.log('[Starboard/Test] Looking for channel_id:', channel_id);
+                if (!starboard) {
+                    console.log('[Starboard/Test] Channel not found in cache. Available text channels:');
+                    interaction.guild.channels.cache.filter(c => c.isTextBased && c.isTextBased()).forEach(c => {
+                        console.log(`- ${c.name} (${c.id})`);
+                    });
+                } else {
+                    console.log('[Starboard/Test] Found channel:', starboard.name, starboard.id);
+                }
+                if (!starboard || !starboard.isTextBased || !starboard.isTextBased()) throw new Error('No #starboard channel found');
                 // Prevent duplicate posts
                 const fetched = await starboard.messages.fetch({ limit: 100 });
                 if (fetched.some(m => m.embeds[0]?.footer?.text?.includes(msg.id))) {
@@ -222,7 +235,7 @@ const client = new Client({
                     fields: [
                         { name: 'Jump to Message', value: `[Go to message](${msg.url})` }
                     ],
-                    footer: { text: `⭐ TEST | ${msg.id}` },
+                    footer: { text: `${emoji} TEST | ${msg.id}` },
                     timestamp: new Date(msg.createdTimestamp)
                 };
                 if (msg.attachments.size > 0) {
@@ -230,7 +243,7 @@ const client = new Client({
                     if (img) embed.image = { url: img.url };
                 }
                 await starboard.send({ embeds: [embed] });
-                await interaction.reply({ content: 'Message posted to #starboard for testing!', flags: 64 });
+                await interaction.reply({ content: 'Message posted to starboard for testing!', flags: 64 });
             } catch (err) {
                 console.error('Test starboard error:', err);
                 await interaction.reply({ content: 'Error: ' + err.message, flags: 64 });
