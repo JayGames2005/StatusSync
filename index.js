@@ -143,7 +143,8 @@ const client = new Client({
 
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
-    if (commandName === 'xpleaderboard') {
+        const { commandName } = interaction;
+        if (commandName === 'xpleaderboard') {
             try {
                 const members = await interaction.guild.members.fetch();
                 const res = await db.query('SELECT user_id, xp FROM user_xp ORDER BY xp DESC LIMIT 10');
@@ -195,7 +196,6 @@ const client = new Client({
             }
             return;
         }
-    const { commandName } = interaction;
         if (commandName === 'repleaderboard') {
             // Show top 10 users by rep in this server
             try {
