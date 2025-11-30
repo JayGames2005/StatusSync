@@ -73,6 +73,11 @@ const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, SlashComm
 // Register slash commands
 const commands = [
     new SlashCommandBuilder()
+        .setName('teststarboard')
+        .setDescription('Admin: Test the starboard by reposting a message to #starboard')
+        .addStringOption(option => option.setName('message').setDescription('Message link or ID').setRequired(true))
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
         .setName('xpleaderboard')
         .setDescription('Show the all-time XP leaderboard'),
     new SlashCommandBuilder()
@@ -187,6 +192,69 @@ const client = new Client({
 
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
+        // /teststarboard command (admin only)
+        if (commandName === 'teststarboard') {
+            if (!interaction.member.permissions.has('Administrator')) {
+                await interaction.reply({ content: 'You need Administrator permission to use this command.', flags: 64 });
+                return;
+            }
+            const input = interaction.options.getString('message');
+            // Parse message link or ID
+            let channelId, messageId;
+            const linkMatch = input.match(/https:\/\/discord.com\/channels\/\d+\/(\d+)\/(\d+)/);
+            if (linkMatch) {
+                channelId = linkMatch[1];
+                messageId = linkMatch[2];
+            } else if (/^\d{17,}$/.test(input)) {
+                // If just an ID, require channel context
+                await interaction.reply({ content: 'Please provide a full message link (right-click > Copy Message Link).', flags: 64 });
+                return;
+            } else {
+                await interaction.reply({ content: 'Invalid message link or ID.', flags: 64 });
+                return;
+            }
+            try {
+                const channel = await interaction.guild.channels.fetch(channelId);
+                if (!channel || !channel.isTextBased || !channel.isTextBased()) throw new Error('Channel not found or not text-based');
+                const msg = await channel.messages.fetch(messageId);
+                if (!msg) throw new Error('Message not found');
+                // Find #starboard
+                let starboard = interaction.guild.channels.cache.find(
+                    ch => ch.name === 'starboard' && ch.isTextBased && ch.isTextBased()
+                );
+                if (!starboard) throw new Error('No #starboard channel found');
+                // Prevent duplicate posts
+                const fetched = await starboard.messages.fetch({ limit: 100 });
+                if (fetched.some(m => m.embeds[0]?.footer?.text?.includes(msg.id))) {
+                    await interaction.reply({ content: 'This message is already on the starboard.', flags: 64 });
+                    return;
+                }
+                // Build embed (same as starboard)
+                const embed = {
+                    color: 0xffd700,
+                    author: {
+                        name: msg.author.tag,
+                        icon_url: msg.author.displayAvatarURL()
+                    },
+                    description: msg.content || '[No text]',
+                    fields: [
+                        { name: 'Jump to Message', value: `[Go to message](${msg.url})` }
+                    ],
+                    footer: { text: `⭐ TEST | ${msg.id}` },
+                    timestamp: new Date(msg.createdTimestamp)
+                };
+                if (msg.attachments.size > 0) {
+                    const img = msg.attachments.find(a => a.contentType && a.contentType.startsWith('image/'));
+                    if (img) embed.image = { url: img.url };
+                }
+                await starboard.send({ embeds: [embed] });
+                await interaction.reply({ content: 'Message posted to #starboard for testing!', flags: 64 });
+            } catch (err) {
+                console.error('Test starboard error:', err);
+                await interaction.reply({ content: 'Error: ' + err.message, flags: 64 });
+            }
+            return;
+        }
         const { commandName } = interaction;
         if (commandName === 'xpleaderboard') {
             try {
