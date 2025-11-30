@@ -501,8 +501,25 @@ client.on('messageReactionAdd', async (reaction, user) => {
         const settingsRes = await db.query('SELECT * FROM starboard_settings WHERE guild_id = $1', [reaction.message.guild.id]);
         if (!settingsRes.rows.length) return;
         const { channel_id, emoji, threshold } = settingsRes.rows[0];
-        // Only care about the configured emoji
-        if (reaction.emoji.name !== emoji) return;
+        // Debug: log emoji info
+        console.log('[Starboard] Reaction emoji:', {
+            name: reaction.emoji.name,
+            id: reaction.emoji.id,
+            identifier: reaction.emoji.identifier,
+            unicode: reaction.emoji.toString(),
+            config: emoji
+        });
+        // Match Unicode or custom emoji
+        const isUnicode = !reaction.emoji.id;
+        let emojiMatch = false;
+        if (isUnicode) {
+            // Unicode emoji: match by character or name
+            emojiMatch = (reaction.emoji.name === emoji || reaction.emoji.toString() === emoji);
+        } else {
+            // Custom emoji: match by name or id
+            emojiMatch = (reaction.emoji.name === emoji || reaction.emoji.id === emoji);
+        }
+        if (!emojiMatch) return;
         // Only trigger when threshold is met
         if (reaction.count < threshold) return;
         // Find the configured starboard channel
