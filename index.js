@@ -524,6 +524,16 @@ client.on('messageReactionAdd', async (reaction, user) => {
         if (reaction.count < threshold) return;
         // Find the configured starboard channel
         let starboard = reaction.message.guild.channels.cache.get(channel_id);
+        // Debug: log channel info
+        console.log('[Starboard] Looking for channel_id:', channel_id);
+        if (!starboard) {
+            console.log('[Starboard] Channel not found in cache. Available text channels:');
+            reaction.message.guild.channels.cache.filter(c => c.isTextBased && c.isTextBased()).forEach(c => {
+                console.log(`- ${c.name} (${c.id})`);
+            });
+        } else {
+            console.log('[Starboard] Found channel:', starboard.name, starboard.id);
+        }
         if (!starboard || !starboard.isTextBased || !starboard.isTextBased()) return;
         // Prevent duplicate posts (by checking if already posted)
         const fetched = await starboard.messages.fetch({ limit: 100 });
