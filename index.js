@@ -1,3 +1,47 @@
+// --- STARBOARD FEATURE ---
+client.on('messageReactionAdd', async (reaction, user) => {
+    try {
+        // Only care about the star emoji
+        if (reaction.emoji.name !== '⭐') return;
+        // Only in guilds
+        if (!reaction.message.guild) return;
+        // Fetch full reaction/message if partial
+        if (reaction.partial) await reaction.fetch();
+        if (reaction.message.partial) await reaction.message.fetch();
+        // Only trigger when threshold is met
+        if (reaction.count < 3) return;
+        // Find or create #starboard channel
+        let starboard = reaction.message.guild.channels.cache.find(
+            ch => ch.name === 'starboard' && ch.isTextBased && ch.isTextBased()
+        );
+        if (!starboard) return; // Don't post if no channel
+        // Prevent duplicate posts (by checking if already posted)
+        const fetched = await starboard.messages.fetch({ limit: 100 });
+        if (fetched.some(m => m.embeds[0]?.footer?.text?.includes(reaction.message.id))) return;
+        // Build embed
+        const embed = {
+            color: 0xffd700,
+            author: {
+                name: reaction.message.author.tag,
+                icon_url: reaction.message.author.displayAvatarURL()
+            },
+            description: reaction.message.content || '[No text]',
+            fields: [
+                { name: 'Jump to Message', value: `[Go to message](${reaction.message.url})` }
+            ],
+            footer: { text: `⭐ ${reaction.count} | ${reaction.message.id}` },
+            timestamp: new Date(reaction.message.createdTimestamp)
+        };
+        // Attach image if present
+        if (reaction.message.attachments.size > 0) {
+            const img = reaction.message.attachments.find(a => a.contentType && a.contentType.startsWith('image/'));
+            if (img) embed.image = { url: img.url };
+        }
+        await starboard.send({ embeds: [embed] });
+    } catch (err) {
+        console.error('Starboard error:', err);
+    }
+});
 // XP SYSTEM: Add XP on each message, weekly and all-time leaderboards, no level-up messages
 // Create tables if not exist
 async function ensureXpTables() {
