@@ -165,7 +165,7 @@ const client = new Client({
                 await interaction.reply({ embeds: [embed] });
             } catch (err) {
                 console.error(err);
-                await interaction.reply({ content: 'Error fetching XP leaderboard: ' + err.message, ephemeral: true });
+                await interaction.reply({ content: 'Error fetching XP leaderboard: ' + err.message, flags: 64 });
             }
             return;
         }
@@ -192,7 +192,7 @@ const client = new Client({
                 await interaction.reply({ embeds: [embed] });
             } catch (err) {
                 console.error(err);
-                await interaction.reply({ content: 'Error fetching weekly XP leaderboard: ' + err.message, ephemeral: true });
+                await interaction.reply({ content: 'Error fetching weekly XP leaderboard: ' + err.message, flags: 64 });
             }
             return;
         }
@@ -221,7 +221,7 @@ const client = new Client({
                 await interaction.reply({ embeds: [embed] });
             } catch (err) {
                 console.error(err);
-                await interaction.reply({ content: 'Error fetching leaderboard: ' + err.message, ephemeral: true });
+                await interaction.reply({ content: 'Error fetching leaderboard: ' + err.message, flags: 64 });
             }
             return;
         }
@@ -234,7 +234,7 @@ const client = new Client({
             }
             const channel = interaction.options.getChannel('channel');
             if (!channel || channel.type !== 0) { // 0 = GUILD_TEXT
-                await interaction.reply({ content: 'Please select a text channel.', ephemeral: true });
+                await interaction.reply({ content: 'Please select a text channel.', flags: 64 });
                 return;
             }
             await db.query(`CREATE TABLE IF NOT EXISTS welcome_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
@@ -283,7 +283,7 @@ const client = new Client({
             const cmds = require('./custom_commands');
             const allCmds = require('fs').existsSync(require('path').join(__dirname, 'custom_commands.json')) ? require('fs').readFileSync(require('path').join(__dirname, 'custom_commands.json'), 'utf8') : '{}';
             if (!JSON.parse(allCmds)[name]) {
-                await interaction.reply({ content: `Custom command /${name} does not exist.`, ephemeral: true });
+                await interaction.reply({ content: `Custom command /${name} does not exist.`, flags: 64 });
                 return;
             }
             // Remove command
@@ -331,7 +331,7 @@ const client = new Client({
                 await interaction.reply({ embeds: [embed] });
             } catch (err) {
                 console.error(err);
-                await interaction.reply({ content: 'Error fetching rep: ' + err.message, ephemeral: true });
+                await interaction.reply({ content: 'Error fetching rep: ' + err.message, flags: 64 });
             }
             return;
         }
@@ -340,15 +340,15 @@ const client = new Client({
             const amount = interaction.options.getInteger('amount') ?? 1;
             const validAmounts = [1, -1, 2, -2];
             if (!user) {
-                await interaction.reply({ content: 'You must specify a user to give rep to!', ephemeral: true });
+                await interaction.reply({ content: 'You must specify a user to give rep to!', flags: 64 });
                 return;
             }
             if (!validAmounts.includes(amount)) {
-                await interaction.reply({ content: 'Amount must be one of: 1, -1, 2, -2', ephemeral: true });
+                await interaction.reply({ content: 'Amount must be one of: 1, -1, 2, -2', flags: 64 });
                 return;
             }
             if (user.id === interaction.user.id) {
-                await interaction.reply({ content: 'You cannot rep yourself!', ephemeral: true });
+                await interaction.reply({ content: 'You cannot rep yourself!', flags: 64 });
                 return;
             }
             // Limit: 2 rep actions per 12 hours
@@ -358,11 +358,11 @@ const client = new Client({
             const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [interaction.user.id, since]);
             const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
             if (repsLeft <= 0) {
-                await interaction.reply({ content: 'You can only give rep 2 times every 12 hours.', ephemeral: true });
+                await interaction.reply({ content: 'You can only give rep 2 times every 12 hours.', flags: 64 });
                 return;
             }
             if (Math.abs(amount) > repsLeft) {
-                await interaction.reply({ content: `You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`, ephemeral: true });
+                await interaction.reply({ content: `You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`, flags: 64 });
                 return;
             }
             let displayName = user.username;
@@ -388,7 +388,7 @@ const client = new Client({
                 await interaction.reply({ embeds: [embed] });
             } catch (err) {
                 console.error(err);
-                await interaction.reply({ content: 'Error updating rep: ' + err.message, ephemeral: true });
+                await interaction.reply({ content: 'Error updating rep: ' + err.message, flags: 64 });
             }
             return;
         }
