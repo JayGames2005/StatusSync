@@ -148,8 +148,9 @@ const client = new Client({
 
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
-        // /teststarboard command (admin only)
-        if (commandName === 'teststarboard') {
+    const { commandName } = interaction;
+    // /teststarboard command (admin only)
+    if (commandName === 'teststarboard') {
             if (!interaction.member.permissions.has('Administrator')) {
                 await interaction.reply({ content: 'You need Administrator permission to use this command.', flags: 64 });
                 return;
@@ -211,7 +212,6 @@ const client = new Client({
             }
             return;
         }
-        const { commandName } = interaction;
         if (commandName === 'xpleaderboard') {
             try {
                 const members = await interaction.guild.members.fetch();
