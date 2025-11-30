@@ -155,8 +155,9 @@ const client = new Client({
 
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
-        // /setstarboard command (admin only)
-        if (commandName === 'setstarboard') {
+    const { commandName } = interaction;
+    // /setstarboard command (admin only)
+    if (commandName === 'setstarboard') {
             if (!interaction.member.permissions.has('Administrator')) {
                 await interaction.reply({ content: 'You need Administrator permission to use this command.', flags: 64 });
                 return;
@@ -173,7 +174,6 @@ const client = new Client({
             await interaction.reply({ content: `Starboard configured! Channel: <#${channel.id}>, Emoji: ${emoji}, Threshold: ${threshold}`, flags: 64 });
             return;
         }
-    const { commandName } = interaction;
     // /teststarboard command (admin only)
     if (commandName === 'teststarboard') {
             if (!interaction.member.permissions.has('Administrator')) {
