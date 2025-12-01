@@ -23,7 +23,13 @@ async function askAI(question) {
         },
         body: JSON.stringify(body)
     });
-    if (!res.ok) throw new Error('OpenAI API error: ' + res.status);
+    if (!res.ok) {
+        if (res.status === 429) {
+            throw new Error('The AI is currently rate-limited. Please wait a few minutes and try again.');
+        } else {
+            throw new Error('OpenAI API error: ' + res.status);
+        }
+    }
     const data = await res.json();
     return data.choices[0].message.content.trim();
 }
