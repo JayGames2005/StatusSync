@@ -1,7 +1,3 @@
-    new SlashCommandBuilder()
-        .setName('ask')
-        .setDescription('Ask the AI a question')
-        .addStringOption(option => option.setName('question').setDescription('Your question').setRequired(true)),
 // --- STARBOARD TRACKING TABLE ---
 async function ensureStarboardTable() {
     await db.query(`CREATE TABLE IF NOT EXISTS starboard_posts (
@@ -45,7 +41,9 @@ const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, SlashComm
 // Register slash commands
 const commands = [
     new SlashCommandBuilder()
-    ,
+        .setName('ask')
+        .setDescription('Ask the AI a question')
+        .addStringOption(option => option.setName('question').setDescription('Your question').setRequired(true)),
     new SlashCommandBuilder()
         .setName('starboardleaderboard')
         .setDescription('Show the top users and messages on the starboard')
