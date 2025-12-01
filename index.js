@@ -1,3 +1,15 @@
+// --- STARBOARD TRACKING TABLE ---
+async function ensureStarboardTable() {
+    await db.query(`CREATE TABLE IF NOT EXISTS starboard_posts (
+        message_id VARCHAR(32) PRIMARY KEY,
+        author_id VARCHAR(32),
+        stars INTEGER DEFAULT 0,
+        url TEXT,
+        content TEXT,
+        created_at TIMESTAMP
+    )`);
+}
+
 // XP SYSTEM: Add XP on each message, weekly and all-time leaderboards, no level-up messages
 // Create tables if not exist
 async function ensureXpTables() {
@@ -29,6 +41,10 @@ const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, SlashComm
 // Register slash commands
 const commands = [
     new SlashCommandBuilder()
+    ,
+    new SlashCommandBuilder()
+        .setName('starboardleaderboard')
+        .setDescription('Show the top users and messages on the starboard')
         .setName('setstarboard')
         .setDescription('Configure the starboard channel, emoji, and threshold')
         .addChannelOption(option => option.setName('channel').setDescription('Starboard channel').setRequired(true))
@@ -155,6 +171,49 @@ const client = new Client({
 
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
+    // /starboardleaderboard command
+    if (interaction.commandName === 'starboardleaderboard') {
+        await ensureStarboardTable();
+        try {
+            // Top users
+            const userRes = await db.query('SELECT author_id, COUNT(*) as count FROM starboard_posts GROUP BY author_id ORDER BY count DESC LIMIT 10');
+            // Top messages
+            const msgRes = await db.query('SELECT message_id, author_id, stars, url, content FROM starboard_posts ORDER BY stars DESC LIMIT 5');
+            let userLines = [];
+            if (userRes.rows.length) {
+                const members = await interaction.guild.members.fetch();
+                userLines = userRes.rows.map((row, i) => {
+                    let member = members.get(row.author_id);
+                    let name = member ? member.displayName : `<@${row.author_id}>`;
+                    return `#${i+1} - ${name}: **${row.count}** starboarded messages`;
+                });
+            } else {
+                userLines = ['No starboarded users yet.'];
+            }
+            let msgLines = [];
+            if (msgRes.rows.length) {
+                msgLines = msgRes.rows.map((row, i) => {
+                    let preview = row.content ? row.content.slice(0, 40).replace(/\n/g, ' ') : '[No text]';
+                    return `#${i+1} - [Jump](${row.url}) by <@${row.author_id}> (**${row.stars}** stars): ${preview}`;
+                });
+            } else {
+                msgLines = ['No starboarded messages yet.'];
+            }
+            const embed = {
+                color: 0xffd700,
+                title: 'Starboard Leaderboard',
+                fields: [
+                    { name: 'Top Users', value: userLines.join('\n') },
+                    { name: 'Top Messages', value: msgLines.join('\n') }
+                ]
+            };
+            await interaction.reply({ embeds: [embed] });
+        } catch (err) {
+            console.error(err);
+            await interaction.reply({ content: 'Error fetching starboard leaderboard: ' + err.message, flags: 64 });
+        }
+        return;
+    }
     const { commandName } = interaction;
     // /setstarboard command (admin only)
     if (commandName === 'setstarboard') {
@@ -503,6 +562,7 @@ client.commands = new Collection();
 
 // --- STARBOARD FEATURE ---
 client.on('messageReactionAdd', async (reaction, user) => {
+    await ensureStarboardTable();
     try {
         // Only in guilds
         if (!reaction.message.guild) return;
@@ -570,6 +630,17 @@ client.on('messageReactionAdd', async (reaction, user) => {
             const img = reaction.message.attachments.find(a => a.contentType && a.contentType.startsWith('image/'));
             if (img) embed.image = { url: img.url };
         }
+        // Track starboarded message in DB
+        await db.query(`INSERT INTO starboard_posts (message_id, author_id, stars, url, content, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (message_id) DO UPDATE SET stars = $3`, [
+            reaction.message.id,
+            reaction.message.author.id,
+            reaction.count,
+            reaction.message.url,
+            reaction.message.content,
+            new Date(reaction.message.createdTimestamp)
+        ]);
         await starboard.send({ embeds: [embed] });
     } catch (err) {
         console.error('Starboard error:', err);
