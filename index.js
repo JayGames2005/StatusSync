@@ -1,3 +1,7 @@
+    new SlashCommandBuilder()
+        .setName('ask')
+        .setDescription('Ask the AI a question')
+        .addStringOption(option => option.setName('question').setDescription('Your question').setRequired(true)),
 // --- STARBOARD TRACKING TABLE ---
 async function ensureStarboardTable() {
     await db.query(`CREATE TABLE IF NOT EXISTS starboard_posts (
@@ -136,6 +140,7 @@ if (process.env.BOT_TOKEN) {
 
 
 const db = require('./db');
+const { askAI } = require('./ai');
 const rep = require('./rep');
 const { generateRepCard } = require('./repCard');
 
@@ -171,6 +176,19 @@ const client = new Client({
 
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
+    // /ask command (AI Q&A)
+    if (interaction.commandName === 'ask') {
+        const question = interaction.options.getString('question');
+        await interaction.deferReply();
+        try {
+            const answer = await askAI(question);
+            await interaction.editReply({ content: answer });
+        } catch (err) {
+            console.error(err);
+            await interaction.editReply({ content: 'AI error: ' + err.message });
+        }
+        return;
+    }
     // /starboardleaderboard command
     if (interaction.commandName === 'starboardleaderboard') {
         await ensureStarboardTable();
@@ -686,6 +704,19 @@ client.on('guildMemberAdd', member => {
 const customCommands = require('./custom_commands');
 
 client.on('messageCreate', async (message) => {
+    // !ask prefix command (AI Q&A)
+    if (message.content.startsWith('!ask ')) {
+        const question = message.content.slice(5).trim();
+        if (!question) return message.reply('Ask me a question!');
+        const sent = await message.reply('Thinking...');
+        try {
+            const answer = await askAI(question);
+            await sent.edit(answer);
+        } catch (err) {
+            await sent.edit('AI error: ' + err.message);
+        }
+        return;
+    }
     if (message.author.bot || !message.guild) return;
     if (!message.content.startsWith('!')) return;
     const args = message.content.slice(1).trim().split(/ +/);
