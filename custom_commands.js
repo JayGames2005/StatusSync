@@ -1,27 +1,37 @@
-// Simple in-memory custom command handler (persist to file for production)
-const fs = require('fs');
-const path = require('path');
 
-const COMMANDS_FILE = path.join(__dirname, 'custom_commands.json');
+// PostgreSQL-based custom command handler
+const db = require('./db');
 
-function loadCommands() {
-    if (!fs.existsSync(COMMANDS_FILE)) return {};
-    return JSON.parse(fs.readFileSync(COMMANDS_FILE, 'utf8'));
+async function ensureTable() {
+    await db.query(`CREATE TABLE IF NOT EXISTS custom_commands (
+        name VARCHAR(64) PRIMARY KEY,
+        response TEXT NOT NULL
+    )`);
 }
 
-function saveCommands(cmds) {
-    fs.writeFileSync(COMMANDS_FILE, JSON.stringify(cmds, null, 2));
+async function addCommand(name, response) {
+    await ensureTable();
+    await db.query(
+        'INSERT INTO custom_commands (name, response) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET response = $2',
+        [name, response]
+    );
 }
 
-function addCommand(name, response) {
-    const cmds = loadCommands();
-    cmds[name] = response;
-    saveCommands(cmds);
+async function getCommand(name) {
+    await ensureTable();
+    const res = await db.query('SELECT response FROM custom_commands WHERE name = $1', [name]);
+    return res.rows.length ? res.rows[0].response : undefined;
 }
 
-function getCommand(name) {
-    const cmds = loadCommands();
-    return cmds[name];
+async function removeCommand(name) {
+    await ensureTable();
+    await db.query('DELETE FROM custom_commands WHERE name = $1', [name]);
 }
 
-module.exports = { addCommand, getCommand };
+async function listCommands() {
+    await ensureTable();
+    const res = await db.query('SELECT name FROM custom_commands');
+    return res.rows.map(row => row.name);
+}
+
+module.exports = { addCommand, getCommand, removeCommand, listCommands };

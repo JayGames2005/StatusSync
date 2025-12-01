@@ -426,18 +426,16 @@ const client = new Client({
 
         // List custom commands
         if (commandName === 'listcmds') {
-            const fs = require('fs');
-            const path = require('path');
-            const file = path.join(__dirname, 'custom_commands.json');
-            let cmds = {};
-            if (fs.existsSync(file)) {
-                cmds = JSON.parse(fs.readFileSync(file, 'utf8'));
-            }
-            const names = Object.keys(cmds);
-            if (names.length === 0) {
-                await interaction.reply('No custom commands found.');
-            } else {
-                await interaction.reply('Custom commands: ' + names.map(n => '`' + n + '`').join(', '));
+            try {
+                const names = await customCommands.listCommands();
+                if (!names.length) {
+                    await interaction.reply('No custom commands found.');
+                } else {
+                    await interaction.reply('Custom commands: ' + names.map(n => '`' + n + '`').join(', '));
+                }
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error fetching custom commands: ' + err.message, flags: 64 });
             }
             return;
         }
@@ -450,8 +448,13 @@ const client = new Client({
             }
             const name = interaction.options.getString('name').toLowerCase();
             const response = interaction.options.getString('response');
-            customCommands.addCommand(name, response);
-            await interaction.reply(`Custom command /${name} added!`);
+            try {
+                await customCommands.addCommand(name, response);
+                await interaction.reply(`Custom command /${name} added!`);
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error adding custom command: ' + err.message, flags: 64 });
+            }
             return;
         }
         // Remove custom command
@@ -461,17 +464,19 @@ const client = new Client({
                 return;
             }
             const name = interaction.options.getString('name').toLowerCase();
-            const cmds = require('./custom_commands');
-            const allCmds = require('fs').existsSync(require('path').join(__dirname, 'custom_commands.json')) ? require('fs').readFileSync(require('path').join(__dirname, 'custom_commands.json'), 'utf8') : '{}';
-            if (!JSON.parse(allCmds)[name]) {
-                await interaction.reply({ content: `Custom command /${name} does not exist.`, flags: 64 });
-                return;
+            try {
+                // Check if command exists
+                const exists = await customCommands.getCommand(name);
+                if (!exists) {
+                    await interaction.reply({ content: `Custom command /${name} does not exist.`, flags: 64 });
+                    return;
+                }
+                await customCommands.removeCommand(name);
+                await interaction.reply(`Custom command /${name} removed!`);
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error removing custom command: ' + err.message, flags: 64 });
             }
-            // Remove command
-            const cmdsObj = JSON.parse(allCmds);
-            delete cmdsObj[name];
-            require('fs').writeFileSync(require('path').join(__dirname, 'custom_commands.json'), JSON.stringify(cmdsObj, null, 2));
-            await interaction.reply(`Custom command /${name} removed!`);
             return;
         }
 
@@ -925,14 +930,54 @@ client.on('messageCreate', async (message) => {
         if (args.length < 2) return message.reply('Usage: !addcmd <name> <response>');
         const name = args.shift().toLowerCase();
         const response = args.join(' ');
-        customCommands.addCommand(name, response);
-        message.channel.send(`Custom command !${name} added!`);
+        try {
+            await customCommands.addCommand(name, response);
+            message.channel.send(`Custom command !${name} added!`);
+        } catch (err) {
+            console.error(err);
+            message.channel.send('Error adding custom command: ' + err.message);
+        }
+        return;
+    }
+    if (command === 'removecmd') {
+        if (args.length < 1) return message.reply('Usage: !removecmd <name>');
+        const name = args.shift().toLowerCase();
+        try {
+            const exists = await customCommands.getCommand(name);
+            if (!exists) {
+                message.channel.send(`Custom command !${name} does not exist.`);
+                return;
+            }
+            await customCommands.removeCommand(name);
+            message.channel.send(`Custom command !${name} removed!`);
+        } catch (err) {
+            console.error(err);
+            message.channel.send('Error removing custom command: ' + err.message);
+        }
+        return;
+    }
+    if (command === 'listcmds') {
+        try {
+            const names = await customCommands.listCommands();
+            if (!names.length) {
+                message.channel.send('No custom commands found.');
+            } else {
+                message.channel.send('Custom commands: ' + names.map(n => '`' + n + '`').join(', '));
+            }
+        } catch (err) {
+            console.error(err);
+            message.channel.send('Error fetching custom commands: ' + err.message);
+        }
         return;
     }
     // Check for custom command
-    const customResponse = customCommands.getCommand(command);
-    if (customResponse) {
-        message.channel.send(customResponse);
+    try {
+        const customResponse = await customCommands.getCommand(command);
+        if (customResponse) {
+            message.channel.send(customResponse);
+        }
+    } catch (err) {
+        console.error(err);
     }
 });
 
