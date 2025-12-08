@@ -1,7 +1,6 @@
 // repCard.js
 // Generates a rep card image using node-canvas
-const { createCanvas, loadImage, registerFont } = require('canvas');
-registerFont(__dirname + '/fonts/OpenSans-Regular.ttf', { family: 'Open Sans' });
+const { createCanvas, loadImage } = require('canvas');
 
 async function generateRepCard({
   displayName,
