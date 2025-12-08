@@ -34,20 +34,20 @@ async function generateRepCard({
   ctx.fill();
   ctx.restore();
 
-  // Draw avatar with border (on left side)
+  // Draw avatar with border (original working logic)
   try {
     const avatar = await loadImage(avatarURL);
     ctx.save();
     ctx.beginPath();
-    ctx.arc(100, 120, 70, 0, Math.PI * 2, true);
+    ctx.arc(100, 120, 64, 0, Math.PI * 2, true);
     ctx.closePath();
     ctx.clip();
-    ctx.drawImage(avatar, 30, 50, 140, 140);
+    ctx.drawImage(avatar, 36, 56, 128, 128);
     ctx.restore();
     // Avatar border
     ctx.save();
     ctx.beginPath();
-    ctx.arc(100, 120, 70, 0, Math.PI * 2, true);
+    ctx.arc(100, 120, 64, 0, Math.PI * 2, true);
     ctx.lineWidth = 6;
     ctx.strokeStyle = '#fff';
     ctx.stroke();
