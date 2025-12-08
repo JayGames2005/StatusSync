@@ -561,26 +561,68 @@ const client = new Client({
         if (commandName === 'rep') {
             const user = interaction.options.getUser('user') || interaction.user;
             let displayName = user.username;
+            let avatarURL = user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL;
             if (interaction.guild) {
                 const member = await interaction.guild.members.fetch(user.id).catch(() => null);
                 if (member && member.displayName) displayName = member.displayName;
+                if (member && member.user && member.user.displayAvatarURL) avatarURL = member.user.displayAvatarURL();
             }
             try {
-                const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
-                const userRep = result.rows.length ? result.rows[0].rep : 0;
+                // Fetch rep
+                const repRes = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+                const userRep = repRes.rows.length ? repRes.rows[0].rep : 0;
+                // Fetch XP and level
+                const xpRes = await db.query('SELECT xp FROM user_xp WHERE user_id = $1', [user.id]);
+                const xp = xpRes.rows.length ? xpRes.rows[0].xp : 0;
+                // Level calculation: e.g. level = Math.floor(0.1 * Math.sqrt(xp))
+                const level = Math.floor(0.1 * Math.sqrt(xp));
+                const xpNeeded = Math.floor(Math.pow((level + 1) / 0.1, 2)) - Math.floor(Math.pow(level / 0.1, 2));
+                const xpCurrent = xp - Math.floor(Math.pow(level / 0.1, 2));
+                // Fetch rank (by rep)
+                const rankRes = await db.query('SELECT user_id FROM user_rep ORDER BY rep DESC');
+                let rank = 1;
+                if (rankRes.rows.length) {
+                    rank = rankRes.rows.findIndex(row => row.user_id === user.id) + 1;
+                    if (rank < 1) rank = 1;
+                }
+                // Fetch background color
+                let bgColor = '#23272A';
+                const bgRes = await db.query('SELECT background_color FROM user_rep_settings WHERE user_id = $1', [user.id]);
+                const colorMap = {
+                    blue: '#3498db',
+                    red: '#e74c3c',
+                    black: '#23272A',
+                    white: '#ecf0f1',
+                    green: '#2ecc71',
+                    purple: '#9b59b6',
+                    orange: '#e67e22'
+                };
+                if (bgRes.rows.length && bgRes.rows[0].background_color && colorMap[bgRes.rows[0].background_color]) {
+                    bgColor = colorMap[bgRes.rows[0].background_color];
+                }
+                // Generate rep card image
+                const { generateRepCard } = require('./repCard');
+                const buffer = await generateRepCard({
+                    displayName,
+                    avatarURL,
+                    rep: userRep,
+                    rank,
+                    level,
+                    xp: xpCurrent,
+                    xpNeeded,
+                    bgColor
+                });
                 // Calculate reps left for the requesting user
                 const now = new Date();
                 const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
                 await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
                 const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [interaction.user.id, since]);
                 const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
-                const embed = {
-                    color: 0x0099ff,
-                    title: `${displayName}'s Reputation`,
-                    description: `Rep: **${userRep}**\nReps you can give in next 12h: **${repsLeft}**`,
-                    thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
-                };
-                await interaction.reply({ embeds: [embed] });
+                // Send image as attachment with info embed
+                await interaction.reply({
+                    content: `Rep: **${userRep}** | Level: **${level}** | XP: **${xpCurrent} / ${xpNeeded}** | Rank: **#${rank}**\nReps you can give in next 12h: **${repsLeft}**`,
+                    files: [{ attachment: buffer, name: 'rep_card.png' }]
+                });
             } catch (err) {
                 console.error(err);
                 await interaction.reply({ content: 'Error fetching rep: ' + err.message, flags: 64 });
@@ -1099,26 +1141,68 @@ client.on('messageCreate', async (message) => {
         // Usage: !rep [@user]
         const user = message.mentions.users.first() || message.author;
         let displayName = user.username;
+        let avatarURL = user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL;
         if (message.guild) {
             const member = await message.guild.members.fetch(user.id).catch(() => null);
             if (member && member.displayName) displayName = member.displayName;
+            if (member && member.user && member.user.displayAvatarURL) avatarURL = member.user.displayAvatarURL();
         }
         try {
-            const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
-            const userRep = result.rows.length ? result.rows[0].rep : 0;
+            // Fetch rep
+            const repRes = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+            const userRep = repRes.rows.length ? repRes.rows[0].rep : 0;
+            // Fetch XP and level
+            const xpRes = await db.query('SELECT xp FROM user_xp WHERE user_id = $1', [user.id]);
+            const xp = xpRes.rows.length ? xpRes.rows[0].xp : 0;
+            // Level calculation: e.g. level = Math.floor(0.1 * Math.sqrt(xp))
+            const level = Math.floor(0.1 * Math.sqrt(xp));
+            const xpNeeded = Math.floor(Math.pow((level + 1) / 0.1, 2)) - Math.floor(Math.pow(level / 0.1, 2));
+            const xpCurrent = xp - Math.floor(Math.pow(level / 0.1, 2));
+            // Fetch rank (by rep)
+            const rankRes = await db.query('SELECT user_id FROM user_rep ORDER BY rep DESC');
+            let rank = 1;
+            if (rankRes.rows.length) {
+                rank = rankRes.rows.findIndex(row => row.user_id === user.id) + 1;
+                if (rank < 1) rank = 1;
+            }
+            // Fetch background color
+            let bgColor = '#23272A';
+            const bgRes = await db.query('SELECT background_color FROM user_rep_settings WHERE user_id = $1', [user.id]);
+            const colorMap = {
+                blue: '#3498db',
+                red: '#e74c3c',
+                black: '#23272A',
+                white: '#ecf0f1',
+                green: '#2ecc71',
+                purple: '#9b59b6',
+                orange: '#e67e22'
+            };
+            if (bgRes.rows.length && bgRes.rows[0].background_color && colorMap[bgRes.rows[0].background_color]) {
+                bgColor = colorMap[bgRes.rows[0].background_color];
+            }
+            // Generate rep card image
+            const { generateRepCard } = require('./repCard');
+            const buffer = await generateRepCard({
+                displayName,
+                avatarURL,
+                rep: userRep,
+                rank,
+                level,
+                xp: xpCurrent,
+                xpNeeded,
+                bgColor
+            });
             // Calculate reps left for the requesting user
             const now = new Date();
             const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
-            await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
+            await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id, time TIMESTAMP)`);
             const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [message.author.id, since]);
             const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
-            const embed = {
-                color: 0x0099ff,
-                title: `${displayName}'s Reputation`,
-                description: `Rep: **${userRep}**\nReps you can give in next 12h: **${repsLeft}**`,
-                thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
-            };
-            message.channel.send({ embeds: [embed] });
+            // Send image as attachment with info
+            await message.channel.send({
+                content: `Rep: **${userRep}** | Level: **${level}** | XP: **${xpCurrent} / ${xpNeeded}** | Rank: **#${rank}**\nReps you can give in next 12h: **${repsLeft}**`,
+                files: [{ attachment: buffer, name: 'rep_card.png' }]
+            });
         } catch (err) {
             console.error(err);
             message.channel.send('Error fetching rep: ' + err.message);
