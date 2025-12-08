@@ -61,8 +61,15 @@ async function generateRepCard({
   ctx.font = 'bold 40px "DejaVu Serif"';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'left';
-  // Only allow printable characters, fallback to 'User' if empty
-  const safeName = (typeof displayName === 'string' ? displayName : String(displayName)).replace(/[^\w\s\-\.!?@#$%^&*()\[\]{}|:;,'"<>~`+=/\\]/g, '').trim() || 'User';
+  // Only allow printable characters, fallback to username if displayName is empty, else 'User'
+  let safeName = '';
+  if (typeof displayName === 'string' && displayName.trim().length > 0) {
+    safeName = displayName.replace(/[^\w\s\-\.!?@#$%^&*()\[\]{}|:;,'"<>~`+=/\\]/g, '').trim();
+  }
+  if (!safeName && typeof repCardUsername === 'string' && repCardUsername.trim().length > 0) {
+    safeName = repCardUsername.replace(/[^\w\s\-\.!?@#$%^&*()\[\]{}|:;,'"<>~`+=/\\]/g, '').trim();
+  }
+  if (!safeName) safeName = 'User';
   ctx.fillText(safeName, 240, 70);
 
   // Rep (below display name, large and blue)
