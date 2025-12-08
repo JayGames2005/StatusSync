@@ -85,6 +85,11 @@ const commands = [
         .addUserOption(option => option.setName('user').setDescription('User to give rep to').setRequired(true))
         .addIntegerOption(option => option.setName('amount').setDescription('Amount (+1, -1, +2, -2)').setRequired(false)),
     new SlashCommandBuilder()
+        .setName('negrep')
+        .setDescription('Give negative reputation to a user')
+        .addUserOption(option => option.setName('user').setDescription('User to give neg rep to').setRequired(true))
+        .addIntegerOption(option => option.setName('amount').setDescription('Amount (-1, -2)').setRequired(false)),
+    new SlashCommandBuilder()
         .setName('addcmd')
         .setDescription('Add a custom command')
         .addStringOption(option => option.setName('name').setDescription('Command name').setRequired(true))
@@ -174,6 +179,67 @@ const client = new Client({
 
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
+        // /negrep command (negative rep)
+        if (interaction.commandName === 'negrep') {
+            if (!interaction.member.permissions.has('Administrator')) {
+                await interaction.reply({ content: 'You need Administrator permission to use this command.', flags: 64 });
+                return;
+            }
+            const user = interaction.options.getUser('user');
+            const amount = interaction.options.getInteger('amount') ?? -1;
+            const validAmounts = [-1, -2];
+            if (!user) {
+                await interaction.reply({ content: 'You must specify a user to give neg rep to!', flags: 64 });
+                return;
+            }
+            if (!validAmounts.includes(amount)) {
+                await interaction.reply({ content: 'Amount must be -1 or -2', flags: 64 });
+                return;
+            }
+            if (user.id === interaction.user.id) {
+                await interaction.reply({ content: 'You cannot neg rep yourself!', flags: 64 });
+                return;
+            }
+            // Limit: 2 rep actions per 12 hours
+            const now = new Date();
+            const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+            await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
+            const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [interaction.user.id, since]);
+            const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
+            if (repsLeft <= 0) {
+                await interaction.reply({ content: 'You can only give rep 2 times every 12 hours.', flags: 64 });
+                return;
+            }
+            if (Math.abs(amount) > repsLeft) {
+                await interaction.reply({ content: `You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`, flags: 64 });
+                return;
+            }
+            let displayName = user.username;
+            if (interaction.guild) {
+                const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+                if (member && member.displayName) displayName = member.displayName;
+            }
+            try {
+                await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2)
+                    ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
+                for (let i = 0; i < Math.abs(amount); i++) {
+                    await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [interaction.user.id, now]);
+                }
+                const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+                const newRep = result.rows.length ? result.rows[0].rep : amount;
+                const embed = {
+                    color: 0xff0000,
+                    title: `${displayName} now has ${newRep} rep!`,
+                    description: `Rep change: ${amount}`,
+                    thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
+                };
+                await interaction.reply({ embeds: [embed] });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error updating rep: ' + err.message, flags: 64 });
+            }
+            return;
+        }
     // /ask command (AI Q&A)
     if (interaction.commandName === 'ask') {
         const question = interaction.options.getString('question');
@@ -1031,7 +1097,7 @@ client.on('messageCreate', async (message) => {
     }
     if (command === 'rep') {
         const user = message.mentions.users.first() || message.author;
-        let displayName = user.username;
+        const displayName = user.username;
         if (command === 'addrep') {
             // Usage: !addrep @user [amount]
             if (!message.mentions.users.size) return message.reply('Usage: !addrep @user [amount] (amount can be 1, 2, -1, -2)');
@@ -1086,7 +1152,7 @@ client.on('messageCreate', async (message) => {
             }
             return;
         }
-        let displayName = user.username;
+        displayName = user.username;
         if (message.guild) {
             const member = await message.guild.members.fetch(user.id).catch(() => null);
             if (member && member.displayName) displayName = member.displayName;
