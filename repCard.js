@@ -57,32 +57,29 @@ async function generateRepCard({
     // Avatar failed to load
   }
 
-  // Use system font for all text
-  // Display name (top left)
+  // Display name (top left, large)
   ctx.font = 'bold 40px "DejaVu Serif"';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'left';
-  ctx.fillText(displayName, 240, 80);
+  ctx.fillText(String(displayName), 240, 70);
 
-  // Rep (centered below avatar, large)
+  // Rep (below display name, large and blue)
   ctx.font = 'bold 36px "DejaVu Serif"';
   ctx.fillStyle = '#00bfff';
-  ctx.textAlign = 'center';
-  ctx.fillText(`Rep: ${rep}`, 100, 220);
+  ctx.textAlign = 'left';
+  ctx.fillText(`Rep: ${rep}`, 240, 115);
 
-  // Level and Rank (below name)
-  ctx.font = '28px "DejaVu Serif"';
+  // Level (below rep)
+  ctx.font = 'italic 28px "DejaVu Serif"';
   ctx.fillStyle = '#ffd700';
   ctx.textAlign = 'left';
-  ctx.fillText(`Level: ${level}`, 240, 130);
-  ctx.fillStyle = '#9b59b6';
-  ctx.fillText(`Rank: #${rank}`, 400, 130);
+  ctx.fillText(`Level: ${level}`, 240, 155);
 
-  // XP (above bar, left)
+  // XP (below level)
   ctx.font = '24px "DejaVu Serif"';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'left';
-  ctx.fillText(`XP: ${xp} / ${xpNeeded}`, 240, 180);
+  ctx.fillText(`XP: ${xp} / ${xpNeeded}`, 240, 190);
 
   // XP Progress bar background (rounded, shadow)
   const barX = 240;
