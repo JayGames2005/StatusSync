@@ -152,6 +152,9 @@ const { askAI } = require('./ai');
 const rep = require('./rep');
 const { generateRepCard } = require('./repCard');
 
+// Require customCommands for custom command handling
+const customCommands = require('./custom_commands');
+
 // Helper: get user's rep card background color
 async function getUserBgColor(userId) {
     await db.query(`CREATE TABLE IF NOT EXISTS user_rep_settings (user_id VARCHAR(32) PRIMARY KEY, background_color VARCHAR(16))`);
