@@ -1002,9 +1002,12 @@ client.on('messageCreate', async (message) => {
         // Weekly XP
         const weekStart = getCurrentWeekStart();
         const res = await db.query('SELECT week_start FROM user_xp_weekly WHERE user_id = $1', [message.author.id]);
-        if (!res.rows.length || res.rows[0].week_start !== weekStart) {
-            // New week or new user: reset XP to current value
-            await db.query('INSERT INTO user_xp_weekly (user_id, xp, week_start) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET xp = $2, week_start = $3', [message.author.id, xpToAdd, weekStart]);
+        if (!res.rows.length) {
+            // New user: set XP to current value
+            await db.query('INSERT INTO user_xp_weekly (user_id, xp, week_start) VALUES ($1, $2, $3)', [message.author.id, xpToAdd, weekStart]);
+        } else if (res.rows[0].week_start !== weekStart) {
+            // New week: reset XP to current value and update week_start
+            await db.query('UPDATE user_xp_weekly SET xp = $1, week_start = $2 WHERE user_id = $3', [xpToAdd, weekStart, message.author.id]);
         } else {
             // Accumulate XP for the week
             await db.query('UPDATE user_xp_weekly SET xp = xp + $1 WHERE user_id = $2', [xpToAdd, message.author.id]);
