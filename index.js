@@ -522,20 +522,19 @@ const client = new Client({
             return;
         }
         if (commandName === 'addrep') {
-            const user = interaction.options.getUser('user');
-            const amount = interaction.options.getInteger('amount') ?? 1;
-            const validAmounts = [1, -1, 2, -2];
-            if (!user) {
-                await interaction.reply({ content: 'You must specify a user to give rep to!', flags: 64 });
-                return;
+            // Usage: !addrep @user [amount]
+            if (!interaction.mentions.users.size) return interaction.reply('Usage: !addrep @user [amount] (amount can be 1, 2, -1, -2)');
+            const user = interaction.mentions.users.first();
+            let amount = 1;
+            if (args.length && /^[-+]?\d+$/.test(args[0])) {
+                amount = parseInt(args.shift(), 10);
             }
+            const validAmounts = [1, -1, 2, -2];
             if (!validAmounts.includes(amount)) {
-                await interaction.reply({ content: 'Amount must be one of: 1, -1, 2, -2', flags: 64 });
-                return;
+                return interaction.reply('Amount must be one of: 1, -1, 2, -2');
             }
             if (user.id === interaction.user.id) {
-                await interaction.reply({ content: 'You cannot rep yourself!', flags: 64 });
-                return;
+                return interaction.reply('You cannot rep yourself!');
             }
             // Limit: 2 rep actions per 12 hours
             const now = new Date();
@@ -544,12 +543,10 @@ const client = new Client({
             const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [interaction.user.id, since]);
             const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
             if (repsLeft <= 0) {
-                await interaction.reply({ content: 'You can only give rep 2 times every 12 hours.', flags: 64 });
-                return;
+                return interaction.reply('You can only give rep 2 times every 12 hours.');
             }
             if (Math.abs(amount) > repsLeft) {
-                await interaction.reply({ content: `You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`, flags: 64 });
-                return;
+                return interaction.reply(`You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`);
             }
             let displayName = user.username;
             if (interaction.guild) {
@@ -575,6 +572,139 @@ const client = new Client({
             } catch (err) {
                 console.error(err);
                 await interaction.reply({ content: 'Error updating rep: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'negrep') {
+            // Usage: !negrep @user [amount]
+            if (!interaction.mentions.users.size) return interaction.reply('Usage: !negrep @user [amount] (amount can be -1 or -2)');
+            const user = interaction.mentions.users.first();
+            let amount = -1;
+            if (args.length && /^-\d+$/.test(args[0])) {
+                amount = parseInt(args.shift(), 10);
+            }
+            const validAmounts = [-1, -2];
+            if (!validAmounts.includes(amount)) {
+                return interaction.reply('Amount must be -1 or -2');
+            }
+            if (user.id === interaction.user.id) {
+                return interaction.reply('You cannot neg rep yourself!');
+            }
+            // Limit: 2 rep actions per 12 hours
+            const now = new Date();
+            const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+            await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
+            const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [interaction.user.id, since]);
+            const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
+            if (repsLeft <= 0) {
+                return interaction.reply('You can only give rep 2 times every 12 hours.');
+            }
+            if (Math.abs(amount) > repsLeft) {
+                return interaction.reply(`You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`);
+            }
+            let displayName = user.username;
+            if (interaction.guild) {
+                const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+                if (member && member.displayName) displayName = member.displayName;
+            }
+            try {
+                await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2)
+                    ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
+                for (let i = 0; i < Math.abs(amount); i++) {
+                    await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [interaction.user.id, now]);
+                }
+                const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+                const newRep = result.rows.length ? result.rows[0].rep : amount;
+                const embed = {
+                    color: 0xff0000,
+                    title: `${displayName} now has ${newRep} rep!`,
+                    description: `Rep change: ${amount}`,
+                    thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
+                };
+                await interaction.reply({ embeds: [embed] });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error updating rep: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'xpleaderboard') {
+            try {
+                const members = await interaction.guild.members.fetch();
+                const res = await db.query('SELECT user_id, xp FROM user_xp ORDER BY xp DESC LIMIT 10');
+                if (!res.rows.length) {
+                    await interaction.reply('No XP data found.');
+                    return;
+                }
+                const leaderboard = await Promise.all(res.rows.map(async (row, i) => {
+                    let member = members.get(row.user_id);
+                    let name = member ? member.displayName : `<@${row.user_id}>`;
+                    return `#${i+1} - ${name}: **${row.xp} XP**`;
+                }));
+                const embed = {
+                    color: 0x3498db,
+                    title: 'All-Time XP Leaderboard',
+                    description: leaderboard.join('\n'),
+                };
+                await interaction.reply({ embeds: [embed] });
+            } catch (err) {
+                console.error('XP Leaderboard error:', err);
+                await interaction.reply({ content: 'Error fetching XP leaderboard: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'xpweekly') {
+            try {
+                const members = await interaction.guild.members.fetch();
+                const weekStart = getCurrentWeekStart();
+                const res = await db.query('SELECT user_id, xp FROM user_xp_weekly WHERE week_start = $1 ORDER BY xp DESC LIMIT 10', [weekStart]);
+                if (!res.rows.length) {
+                    await interaction.reply('No weekly XP data found.');
+                    return;
+                }
+                const leaderboard = await Promise.all(res.rows.map(async (row, i) => {
+                    let member = members.get(row.user_id);
+                    let name = member ? member.displayName : `<@${row.user_id}>`;
+                    return `#${i+1} - ${name}: **${row.xp} XP**`;
+                }));
+                const embed = {
+                    color: 0x2ecc71,
+                    title: 'Weekly XP Leaderboard',
+                    description: leaderboard.join('\n'),
+                    footer: { text: 'Resets every Monday 11am EST' }
+                };
+                await interaction.reply({ embeds: [embed] });
+            } catch (err) {
+                console.error('Weekly XP Leaderboard error:', err);
+                await interaction.reply({ content: 'Error fetching weekly XP leaderboard: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+        if (commandName === 'setupdb') {
+            // Only allow server owner or admins to run this
+            if (!interaction.member.permissions.has('Administrator')) {
+                return interaction.reply('You need Administrator permission to run this command.');
+            }
+            try {
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS user_rep (
+                        user_id VARCHAR(32) PRIMARY KEY,
+                        rep INTEGER DEFAULT 0
+                    );
+                `);
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS custom_commands (
+                        name VARCHAR(64) PRIMARY KEY,
+                        response TEXT NOT NULL
+                    );
+                `);
+                interaction.channel.send('Database tables (user_rep, custom_commands) created or already exist!');
+            } catch (err) {
+                console.error(err);
+                interaction.channel.send('Error creating tables: ' + err.message);
             }
             return;
         }
@@ -742,6 +872,7 @@ client.on('messageCreate', async (message) => {
             const members = await message.guild.members.fetch();
             const res = await db.query('SELECT user_id, xp FROM user_xp ORDER BY xp DESC LIMIT 10');
             if (!res.rows.length) {
+                console.error('XP Leaderboard DB result:', res);
                 message.channel.send('No XP data found.');
                 return;
             }
@@ -757,7 +888,7 @@ client.on('messageCreate', async (message) => {
             };
             message.channel.send({ embeds: [embed] });
         } catch (err) {
-            console.error(err);
+            console.error('XP Leaderboard error:', err);
             message.channel.send('Error fetching XP leaderboard: ' + err.message);
         }
         return;
@@ -769,6 +900,7 @@ client.on('messageCreate', async (message) => {
             const weekStart = getCurrentWeekStart();
             const res = await db.query('SELECT user_id, xp FROM user_xp_weekly WHERE week_start = $1 ORDER BY xp DESC LIMIT 10', [weekStart]);
             if (!res.rows.length) {
+                console.error('Weekly XP Leaderboard DB result:', res);
                 message.channel.send('No weekly XP data found.');
                 return;
             }
@@ -785,7 +917,7 @@ client.on('messageCreate', async (message) => {
             };
             message.channel.send({ embeds: [embed] });
         } catch (err) {
-            console.error(err);
+            console.error('Weekly XP Leaderboard error:', err);
             message.channel.send('Error fetching weekly XP leaderboard: ' + err.message);
         }
         return;
@@ -817,8 +949,278 @@ client.on('messageCreate', async (message) => {
     }
     if (message.author.bot || !message.guild) return;
     if (!message.content.startsWith('!')) return;
+        if (command === 'negrep') {
+            // Usage: !negrep @user [amount]
+            if (!message.mentions.users.size) return message.reply('Usage: !negrep @user [amount] (amount can be -1 or -2)');
+            const user = message.mentions.users.first();
+            let amount = -1;
+            if (args.length && /^-\d+$/.test(args[0])) {
+                amount = parseInt(args.shift(), 10);
+            }
+            const validAmounts = [-1, -2];
+            if (!validAmounts.includes(amount)) {
+                return message.reply('Amount must be -1 or -2');
+            }
+            if (user.id === message.author.id) {
+                return message.reply('You cannot neg rep yourself!');
+            }
+            // Limit: 2 rep actions per 12 hours
+            const now = new Date();
+            const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+            await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
+            const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [message.author.id, since]);
+            const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
+            if (repsLeft <= 0) {
+                return message.reply('You can only give rep 2 times every 12 hours.');
+            }
+            if (Math.abs(amount) > repsLeft) {
+                return message.reply(`You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`);
+            }
+            let displayName = user.username;
+            if (message.guild) {
+                const member = await message.guild.members.fetch(user.id).catch(() => null);
+                if (member && member.displayName) displayName = member.displayName;
+            }
+            try {
+                await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2)
+                    ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
+                for (let i = 0; i < Math.abs(amount); i++) {
+                    await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [message.author.id, now]);
+                }
+                const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+                const newRep = result.rows.length ? result.rows[0].rep : amount;
+                const embed = {
+                    color: 0xff0000,
+                    title: `${displayName} now has ${newRep} rep!`,
+                    description: `Rep change: ${amount}`,
+                    thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
+                };
+                message.channel.send({ embeds: [embed] });
+            } catch (err) {
+                console.error(err);
+                message.channel.send('Error updating rep: ' + err.message);
+            }
+            return;
+        }
     // ...existing code...
 
+    if (command === 'setupdb') {
+        // Only allow server owner or admins to run this
+        if (!message.member.permissions.has('Administrator')) {
+            return message.reply('You need Administrator permission to run this command.');
+        }
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS user_rep (
+                    user_id VARCHAR(32) PRIMARY KEY,
+                    rep INTEGER DEFAULT 0
+                );
+            `);
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS custom_commands (
+                    name VARCHAR(64) PRIMARY KEY,
+                    response TEXT NOT NULL
+                );
+            `);
+            message.channel.send('Database tables (user_rep, custom_commands) created or already exist!');
+        } catch (err) {
+            console.error(err);
+            message.channel.send('Error creating tables: ' + err.message);
+        }
+        return;
+    }
+    if (command === 'rep') {
+        const user = message.mentions.users.first() || message.author;
+        let displayName = user.username;
+        if (command === 'addrep') {
+            // Usage: !addrep @user [amount]
+            if (!message.mentions.users.size) return message.reply('Usage: !addrep @user [amount] (amount can be 1, 2, -1, -2)');
+            const user = message.mentions.users.first();
+            let amount = 1;
+            if (args.length && /^[-+]?\d+$/.test(args[0])) {
+                amount = parseInt(args.shift(), 10);
+            }
+            const validAmounts = [1, -1, 2, -2];
+            if (!validAmounts.includes(amount)) {
+                return message.reply('Amount must be one of: 1, -1, 2, -2');
+            }
+            if (user.id === message.author.id) {
+                return message.reply('You cannot rep yourself!');
+            }
+            // Limit: 2 rep actions per 12 hours
+            const now = new Date();
+            const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+            await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
+            const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [message.author.id, since]);
+            const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
+            if (repsLeft <= 0) {
+                return message.reply('You can only give rep 2 times every 12 hours.');
+            }
+            if (Math.abs(amount) > repsLeft) {
+                return message.reply(`You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`);
+            }
+            let displayName = user.username;
+            if (message.guild) {
+                const member = await message.guild.members.fetch(user.id).catch(() => null);
+                if (member && member.displayName) displayName = member.displayName;
+            }
+            try {
+                await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2)
+                    ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
+                // Log each rep action separately (e.g. +2 counts as 2 actions)
+                for (let i = 0; i < Math.abs(amount); i++) {
+                    await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [message.author.id, now]);
+                }
+                const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+                const newRep = result.rows.length ? result.rows[0].rep : amount;
+                const embed = {
+                    color: amount > 0 ? 0x00ff00 : 0xff0000,
+                    title: `${displayName} now has ${newRep} rep!`,
+                    description: `Rep change: ${amount > 0 ? '+' : ''}${amount}`,
+                    thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
+                };
+                message.channel.send({ embeds: [embed] });
+            } catch (err) {
+                console.error(err);
+                message.channel.send('Error updating rep: ' + err.message);
+            }
+            return;
+        }
+        let displayName = user.username;
+        if (message.guild) {
+            const member = await message.guild.members.fetch(user.id).catch(() => null);
+            if (member && member.displayName) displayName = member.displayName;
+        }
+        try {
+            await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2)
+                ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
+            // Log each rep action separately (e.g. +2 counts as 2 actions)
+            for (let i = 0; i < Math.abs(amount); i++) {
+                await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [message.author.id, now]);
+            }
+            const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+            const newRep = result.rows.length ? result.rows[0].rep : amount;
+            const embed = {
+                color: amount > 0 ? 0x00ff00 : 0xff0000,
+                title: `${displayName} now has ${newRep} rep!`,
+                description: `Rep change: ${amount > 0 ? '+' : ''}${amount}`,
+                thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
+            };
+            message.channel.send({ embeds: [embed] });
+        } catch (err) {
+            console.error(err);
+            message.channel.send('Error updating rep: ' + err.message);
+        }
+        return;
+    }
+
+    if (command === 'negrep') {
+        // Usage: !negrep @user [amount]
+        if (!message.mentions.users.size) return message.reply('Usage: !negrep @user [amount] (amount can be -1 or -2)');
+        const user = message.mentions.users.first();
+        let amount = -1;
+        if (args.length && /^-\d+$/.test(args[0])) {
+            amount = parseInt(args.shift(), 10);
+        }
+        const validAmounts = [-1, -2];
+        if (!validAmounts.includes(amount)) {
+            return message.reply('Amount must be -1 or -2');
+        }
+        if (user.id === message.author.id) {
+            return message.reply('You cannot neg rep yourself!');
+        }
+        // Limit: 2 rep actions per 12 hours
+        const now = new Date();
+        const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+        await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
+        const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [message.author.id, since]);
+        const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
+        if (repsLeft <= 0) {
+            return message.reply('You can only give rep 2 times every 12 hours.');
+        }
+        if (Math.abs(amount) > repsLeft) {
+            return message.reply(`You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`);
+        }
+        let displayName = user.username;
+        if (message.guild) {
+            const member = await message.guild.members.fetch(user.id).catch(() => null);
+            if (member && member.displayName) displayName = member.displayName;
+        }
+        try {
+            await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2)
+                ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
+            for (let i = 0; i < Math.abs(amount); i++) {
+                await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [message.author.id, now]);
+            }
+            const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+            const newRep = result.rows.length ? result.rows[0].rep : amount;
+            const embed = {
+                color: 0xff0000,
+                title: `${displayName} now has ${newRep} rep!`,
+                description: `Rep change: ${amount}`,
+                thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
+            };
+            message.channel.send({ embeds: [embed] });
+        } catch (err) {
+            console.error(err);
+            message.channel.send('Error updating rep: ' + err.message);
+        }
+        return;
+    }
+
+    if (command === 'xpleaderboard') {
+        try {
+            const members = await message.guild.members.fetch();
+            const res = await db.query('SELECT user_id, xp FROM user_xp ORDER BY xp DESC LIMIT 10');
+            if (!res.rows.length) {
+                message.channel.send('No XP data found.');
+                return;
+            }
+            const leaderboard = await Promise.all(res.rows.map(async (row, i) => {
+                let member = members.get(row.user_id);
+                let name = member ? member.displayName : `<@${row.user_id}>`;
+                return `#${i+1} - ${name}: **${row.xp} XP**`;
+            }));
+            const embed = {
+                color: 0x3498db,
+                title: 'All-Time XP Leaderboard',
+                description: leaderboard.join('\n'),
+            };
+            message.channel.send({ embeds: [embed] });
+        } catch (err) {
+            console.error(err);
+            message.channel.send('Error fetching XP leaderboard: ' + err.message);
+        }
+        return;
+    }
+
+    if (command === 'xpweekly') {
+        try {
+            const members = await message.guild.members.fetch();
+            const weekStart = getCurrentWeekStart();
+            const res = await db.query('SELECT user_id, xp FROM user_xp_weekly WHERE week_start = $1 ORDER BY xp DESC LIMIT 10', [weekStart]);
+            if (!res.rows.length) {
+                message.channel.send('No weekly XP data found.');
+                return;
+            }
+            const leaderboard = await Promise.all(res.rows.map(async (row, i) => {
+                let member = members.get(row.user_id);
+                let name = member ? member.displayName : `<@${row.user_id}>`;
+                return `#${i+1} - ${name}: **${row.xp} XP**`;
+            }));
+            const embed = {
+                color: 0x2ecc71,
+                title: 'Weekly XP Leaderboard',
+                description: leaderboard.join('\n'),
+                footer: { text: 'Resets every Monday 11am EST' }
+            };
+            message.channel.send({ embeds: [embed] });
+        } catch (err) {
+            console.error(err);
+            message.channel.send('Error fetching weekly XP leaderboard: ' + err.message);
+        }
+        return;
+    }
     if (command === 'setupdb') {
         // Only allow server owner or admins to run this
         if (!message.member.permissions.has('Administrator')) {
@@ -874,7 +1276,8 @@ client.on('messageCreate', async (message) => {
         return;
     }
     if (command === 'addrep') {
-        if (!message.mentions.users.size) return message.reply('Mention a user to give rep!');
+        // Usage: !addrep @user [amount]
+        if (!message.mentions.users.size) return message.reply('Usage: !addrep @user [amount] (amount can be 1, 2, -1, -2)');
         const user = message.mentions.users.first();
         let amount = 1;
         if (args.length && /^[-+]?\d+$/.test(args[0])) {
@@ -926,59 +1329,228 @@ client.on('messageCreate', async (message) => {
         }
         return;
     }
-    if (command === 'addcmd') {
-        if (args.length < 2) return message.reply('Usage: !addcmd <name> <response>');
-        const name = args.shift().toLowerCase();
-        const response = args.join(' ');
+
+    if (command === 'negrep') {
+        // Usage: !negrep @user [amount]
+        if (!message.mentions.users.size) return message.reply('Usage: !negrep @user [amount] (amount can be -1 or -2)');
+        const user = message.mentions.users.first();
+        let amount = -1;
+        if (args.length && /^-\d+$/.test(args[0])) {
+            amount = parseInt(args.shift(), 10);
+        }
+        const validAmounts = [-1, -2];
+        if (!validAmounts.includes(amount)) {
+            return message.reply('Amount must be -1 or -2');
+        }
+        if (user.id === message.author.id) {
+            return message.reply('You cannot neg rep yourself!');
+        }
+        // Limit: 2 rep actions per 12 hours
+        const now = new Date();
+        const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+        await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
+        const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [message.author.id, since]);
+        const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
+        if (repsLeft <= 0) {
+            return message.reply('You can only give rep 2 times every 12 hours.');
+        }
+        if (Math.abs(amount) > repsLeft) {
+            return message.reply(`You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`);
+        }
+        let displayName = user.username;
+        if (message.guild) {
+            const member = await message.guild.members.fetch(user.id).catch(() => null);
+            if (member && member.displayName) displayName = member.displayName;
+        }
         try {
-            await customCommands.addCommand(name, response);
-            message.channel.send(`Custom command !${name} added!`);
+            await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2)
+                ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
+            for (let i = 0; i < Math.abs(amount); i++) {
+                await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [message.author.id, now]);
+            }
+            const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+            const newRep = result.rows.length ? result.rows[0].rep : amount;
+            const embed = {
+                color: 0xff0000,
+                title: `${displayName} now has ${newRep} rep!`,
+                description: `Rep change: ${amount}`,
+                thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
+            };
+            message.channel.send({ embeds: [embed] });
         } catch (err) {
             console.error(err);
-            message.channel.send('Error adding custom command: ' + err.message);
+            message.channel.send('Error updating rep: ' + err.message);
         }
         return;
     }
-    if (command === 'removecmd') {
-        if (args.length < 1) return message.reply('Usage: !removecmd <name>');
-        const name = args.shift().toLowerCase();
+
+    if (command === 'xpleaderboard') {
         try {
-            const exists = await customCommands.getCommand(name);
-            if (!exists) {
-                message.channel.send(`Custom command !${name} does not exist.`);
+            const members = await message.guild.members.fetch();
+            const res = await db.query('SELECT user_id, xp FROM user_xp ORDER BY xp DESC LIMIT 10');
+            if (!res.rows.length) {
+                message.channel.send('No XP data found.');
                 return;
             }
-            await customCommands.removeCommand(name);
-            message.channel.send(`Custom command !${name} removed!`);
+            const leaderboard = await Promise.all(res.rows.map(async (row, i) => {
+                let member = members.get(row.user_id);
+                let name = member ? member.displayName : `<@${row.user_id}>`;
+                return `#${i+1} - ${name}: **${row.xp} XP**`;
+            }));
+            const embed = {
+                color: 0x3498db,
+                title: 'All-Time XP Leaderboard',
+                description: leaderboard.join('\n'),
+            };
+            message.channel.send({ embeds: [embed] });
         } catch (err) {
             console.error(err);
-            message.channel.send('Error removing custom command: ' + err.message);
+            message.channel.send('Error fetching XP leaderboard: ' + err.message);
         }
         return;
     }
-    if (command === 'listcmds') {
-        try {
-            const names = await customCommands.listCommands();
-            if (!names.length) {
-                message.channel.send('No custom commands found.');
-            } else {
-                message.channel.send('Custom commands: ' + names.map(n => '`' + n + '`').join(', '));
-            }
-        } catch (err) {
-            console.error(err);
-            message.channel.send('Error fetching custom commands: ' + err.message);
-        }
-        return;
-    }
-    // Check for custom command
-    try {
-        const customResponse = await customCommands.getCommand(command);
-        if (customResponse) {
-            message.channel.send(customResponse);
-        }
-    } catch (err) {
-        console.error(err);
-    }
-});
 
-client.login(process.env.BOT_TOKEN);
+    if (command === 'xpweekly') {
+        try {
+            const members = await message.guild.members.fetch();
+            const weekStart = getCurrentWeekStart();
+            const res = await db.query('SELECT user_id, xp FROM user_xp_weekly WHERE week_start = $1 ORDER BY xp DESC LIMIT 10', [weekStart]);
+            if (!res.rows.length) {
+                message.channel.send('No weekly XP data found.');
+                return;
+            }
+            const leaderboard = await Promise.all(res.rows.map(async (row, i) => {
+                let member = members.get(row.user_id);
+                let name = member ? member.displayName : `<@${row.user_id}>`;
+                return `#${i+1} - ${name}: **${row.xp} XP**`;
+            }));
+            const embed = {
+                color: 0x2ecc71,
+                title: 'Weekly XP Leaderboard',
+                description: leaderboard.join('\n'),
+                footer: { text: 'Resets every Monday 11am EST' }
+            };
+            message.channel.send({ embeds: [embed] });
+        } catch (err) {
+            console.error(err);
+            message.channel.send('Error fetching weekly XP leaderboard: ' + err.message);
+        }
+        return;
+    }
+    if (command === 'setupdb') {
+        // Only allow server owner or admins to run this
+        if (!message.member.permissions.has('Administrator')) {
+            return message.reply('You need Administrator permission to run this command.');
+        }
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS user_rep (
+                    user_id VARCHAR(32) PRIMARY KEY,
+                    rep INTEGER DEFAULT 0
+                );
+            `);
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS custom_commands (
+                    name VARCHAR(64) PRIMARY KEY,
+                    response TEXT NOT NULL
+                );
+            `);
+            message.channel.send('Database tables (user_rep, custom_commands) created or already exist!');
+        } catch (err) {
+            console.error(err);
+            message.channel.send('Error creating tables: ' + err.message);
+        }
+        return;
+    }
+    if (command === 'rep') {
+        const user = message.mentions.users.first() || message.author;
+        let displayName = user.username;
+        if (message.guild) {
+            const member = await message.guild.members.fetch(user.id).catch(() => null);
+            if (member && member.displayName) displayName = member.displayName;
+        }
+        try {
+            const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+            const userRep = result.rows.length ? result.rows[0].rep : 0;
+            // Calculate reps left for the requesting user
+            const now = new Date();
+            const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+            await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
+            const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [message.author.id, since]);
+            const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
+            const embed = {
+                color: 0x0099ff,
+                title: `${displayName}'s Reputation`,
+                description: `Rep: **${userRep}**\nReps you can give in next 12h: **${repsLeft}**`,
+                thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
+            };
+            message.channel.send({ embeds: [embed] });
+        } catch (err) {
+            console.error(err);
+            message.channel.send('Error fetching rep: ' + err.message);
+        }
+        return;
+    }
+    if (command === 'addrep') {
+        // Usage: !addrep @user [amount]
+        if (!message.mentions.users.size) return message.reply('Usage: !addrep @user [amount] (amount can be 1, 2, -1, -2)');
+        const user = message.mentions.users.first();
+        let amount = 1;
+        if (args.length && /^[-+]?\d+$/.test(args[0])) {
+            amount = parseInt(args.shift(), 10);
+        }
+        const validAmounts = [1, -1, 2, -2];
+        if (!validAmounts.includes(amount)) {
+            return message.reply('Amount must be one of: 1, -1, 2, -2');
+        }
+        if (user.id === message.author.id) {
+            return message.reply('You cannot rep yourself!');
+        }
+        // Limit: 2 rep actions per 12 hours
+        const now = new Date();
+        const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+        await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
+        const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [message.author.id, since]);
+        const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
+        if (repsLeft <= 0) {
+            return message.reply('You can only give rep 2 times every 12 hours.');
+        }
+        if (Math.abs(amount) > repsLeft) {
+            return message.reply(`You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`);
+        }
+        let displayName = user.username;
+        if (message.guild) {
+            const member = await message.guild.members.fetch(user.id).catch(() => null);
+            if (member && member.displayName) displayName = member.displayName;
+        }
+        try {
+            await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2)
+                ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
+            // Log each rep action separately (e.g. +2 counts as 2 actions)
+            for (let i = 0; i < Math.abs(amount); i++) {
+                await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [message.author.id, now]);
+            }
+            const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+            const newRep = result.rows.length ? result.rows[0].rep : amount;
+            const embed = {
+                color: amount > 0 ? 0x00ff00 : 0xff0000,
+                title: `${displayName} now has ${newRep} rep!`,
+                description: `Rep change: ${amount > 0 ? '+' : ''}${amount}`,
+                thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
+            };
+            message.channel.send({ embeds: [embed] });
+        } catch (err) {
+            console.error(err);
+            message.channel.send('Error updating rep: ' + err.message);
+        }
+        return;
+    }
+
+    if (command === 'negrep') {
+        // Usage: !negrep @user [amount]
+        if (!message.mentions.users.size) return message.reply('Usage: !negrep @user [amount] (amount can be -1 or -2)');
+        const user = message.mentions.users.first();
+        let amount = -1;
+        if (args.length && /^-\d+$/.test(args[0])) {
+            amount = parseInt(args.shift(), 10);
+       
