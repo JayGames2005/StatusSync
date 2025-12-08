@@ -946,13 +946,24 @@ client.on('guildMemberAdd', member => {
         } catch {}
         // Use display name if available
         let displayName = member.displayName || member.user.username;
-        const embed = {
-            color: 0x00bfff,
-            title: `Welcome, ${displayName}!`,
-            description: `<@${member.id}> joined the server!\nRep: **${userRep}**`,
-            thumbnail: { url: member.user.displayAvatarURL ? member.user.displayAvatarURL() : member.user.avatarURL },
-        };
-        channel.send({ content: `<@${member.id}> Welcome to the server!`, embeds: [embed] });
+        let avatarURL = member.user.displayAvatarURL ? member.user.displayAvatarURL({ extension: 'png', size: 128 }) : member.user.avatarURL;
+        // Generate welcome card image using repCard.js
+        const { generateRepCard } = require('./repCard');
+        const buffer = await generateRepCard({
+            displayName,
+            username: member.user.username,
+            avatarURL,
+            rep: userRep,
+            rank: 1,
+            level: 1,
+            xp: 0,
+            xpNeeded: 100,
+            bgColor: '#00bfff'
+        });
+        channel.send({
+            content: `<@${member.id}> Welcome to the server!`,
+            files: [{ attachment: buffer, name: 'welcome_card.png' }]
+        });
     })();
 });
 
