@@ -5,6 +5,7 @@ registerFont(__dirname + '/fonts/DejaVuSerif-Italic.ttf', { family: 'DejaVu Seri
 
 async function generateRepCard({
   displayName,
+  username,
   avatarURL,
   rep,
   rank = 1,
@@ -66,8 +67,8 @@ async function generateRepCard({
   if (typeof displayName === 'string' && displayName.trim().length > 0) {
     safeName = displayName.replace(/[^\w\s\-\.!?@#$%^&*()\[\]{}|:;,'"<>~`+=/\\]/g, '').trim();
   }
-  if (!safeName && typeof repCardUsername === 'string' && repCardUsername.trim().length > 0) {
-    safeName = repCardUsername.replace(/[^\w\s\-\.!?@#$%^&*()\[\]{}|:;,'"<>~`+=/\\]/g, '').trim();
+  if (!safeName && typeof username === 'string' && username.trim().length > 0) {
+    safeName = username.replace(/[^\w\s\-\.!?@#$%^&*()\[\]{}|:;,'"<>~`+=/\\]/g, '').trim();
   }
   if (!safeName) safeName = 'User';
   ctx.fillText(safeName, 240, 70);
