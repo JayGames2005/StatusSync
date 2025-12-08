@@ -561,11 +561,11 @@ const client = new Client({
         if (commandName === 'rep') {
             const user = interaction.options.getUser('user') || interaction.user;
             let displayName = user.username;
-            let avatarURL = user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL;
+            let avatarURL = user.displayAvatarURL ? user.displayAvatarURL({ extension: 'png', size: 128 }) : user.avatarURL;
             if (interaction.guild) {
                 const member = await interaction.guild.members.fetch(user.id).catch(() => null);
                 if (member && member.displayName) displayName = member.displayName;
-                if (member && member.user && member.user.displayAvatarURL) avatarURL = member.user.displayAvatarURL();
+                if (member && member.user && member.user.displayAvatarURL) avatarURL = member.user.displayAvatarURL({ extension: 'png', size: 128 });
             }
             try {
                 // Fetch rep
@@ -1153,11 +1153,11 @@ client.on('messageCreate', async (message) => {
         // Usage: !rep [@user]
         const user = message.mentions.users.first() || message.author;
         let displayName = user.username;
-        let avatarURL = user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL;
+        let avatarURL = user.displayAvatarURL ? user.displayAvatarURL({ extension: 'png', size: 128 }) : user.avatarURL;
         if (message.guild) {
             const member = await message.guild.members.fetch(user.id).catch(() => null);
             if (member && member.displayName) displayName = member.displayName;
-            if (member && member.user && member.user.displayAvatarURL) avatarURL = member.user.displayAvatarURL();
+            if (member && member.user && member.user.displayAvatarURL) avatarURL = member.user.displayAvatarURL({ extension: 'png', size: 128 });
         }
         try {
             // Fetch rep
