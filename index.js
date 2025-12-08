@@ -1,8 +1,4 @@
-    if (commandName === 'imgsay') {
-        const handleImgSay = require('./imgsay-handler');
-        await handleImgSay(interaction);
-        return;
-    }
+    // Removed invalid top-level imgsay handler. See below for correct placement.
 // --- STARBOARD TRACKING TABLE ---
 async function ensureStarboardTable() {
     await db.query(`CREATE TABLE IF NOT EXISTS starboard_posts (
@@ -184,6 +180,12 @@ const client = new Client({
 
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
+                // /imgsay command
+                if (interaction.commandName === 'imgsay') {
+                    const handleImgSay = require('./imgsay-handler');
+                    await handleImgSay(interaction);
+                    return;
+                }
         // /negrep command (negative rep)
         if (interaction.commandName === 'negrep') {
             if (!interaction.member.permissions.has('Administrator')) {
