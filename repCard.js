@@ -1,7 +1,7 @@
 // repCard.js
 // Generates a rep card image using node-canvas
 const { createCanvas, loadImage, registerFont } = require('canvas');
-registerFont(__dirname + '/fonts/DejaVuSans.ttf', { family: 'DejaVuSans' });
+registerFont(__dirname + '/fonts/OpenSans-Regular.ttf', { family: 'Open Sans' });
 
 async function generateRepCard({
   displayName,
@@ -57,21 +57,21 @@ async function generateRepCard({
     // Avatar failed to load
   }
 
-  // Use DejaVuSans for all text for maximum compatibility
+  // Use Open Sans for all text for maximum compatibility
   // Display name (top left)
-  ctx.font = 'bold 40px DejaVuSans';
+  ctx.font = 'bold 40px "Open Sans"';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'left';
   ctx.fillText(displayName, 240, 80);
 
   // Rep (top right)
-  ctx.font = 'bold 32px DejaVuSans';
+  ctx.font = 'bold 32px "Open Sans"';
   ctx.fillStyle = '#00bfff';
   ctx.textAlign = 'right';
   ctx.fillText(`Rep: ${rep}`, 760, 80);
 
   // Level and Rank (below name)
-  ctx.font = '28px DejaVuSans';
+  ctx.font = '28px "Open Sans"';
   ctx.fillStyle = '#ffd700';
   ctx.textAlign = 'left';
   ctx.fillText(`Level: ${level}`, 240, 130);
@@ -79,7 +79,7 @@ async function generateRepCard({
   ctx.fillText(`Rank: #${rank}`, 400, 130);
 
   // XP (above bar, left)
-  ctx.font = '24px DejaVuSans';
+  ctx.font = '24px "Open Sans"';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'left';
   ctx.fillText(`XP: ${xp} / ${xpNeeded}`, 240, 180);
@@ -115,7 +115,7 @@ async function generateRepCard({
   ctx.fill();
 
   // XP percent text (inside bar, right, high contrast)
-  ctx.font = 'bold 22px DejaVuSans';
+  ctx.font = 'bold 22px "Open Sans"';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'right';
   ctx.fillText(`${Math.floor((xp / xpNeeded) * 100)}%`, 690, 255);
