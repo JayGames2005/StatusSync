@@ -620,7 +620,6 @@ const client = new Client({
                 const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
                 // Send image as attachment with info embed
                 await interaction.reply({
-                    content: `Rep: **${userRep}** | Level: **${level}** | XP: **${xpCurrent} / ${xpNeeded}** | Rank: **#${rank}**\nReps you can give in next 12h: **${repsLeft}**`,
                     files: [{ attachment: buffer, name: 'rep_card.png' }]
                 });
             } catch (err) {
@@ -1212,7 +1211,6 @@ client.on('messageCreate', async (message) => {
             const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
             // Send image as attachment with info
             await message.channel.send({
-                content: `Rep: **${userRep}** | Level: **${level}** | XP: **${xpCurrent} / ${xpNeeded}** | Rank: **#${rank}**\nReps you can give in next 12h: **${repsLeft}**`,
                 files: [{ attachment: buffer, name: 'rep_card.png' }]
             });
         } catch (err) {
