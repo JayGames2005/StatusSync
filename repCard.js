@@ -1,6 +1,7 @@
 // repCard.js
 // Generates a rep card image using node-canvas
-const { createCanvas, loadImage } = require('canvas');
+const { createCanvas, loadImage, registerFont } = require('canvas');
+registerFont(__dirname + '/fonts/DejaVuSerif-Italic.ttf', { family: 'DejaVu Serif' });
 
 async function generateRepCard({
   displayName,
@@ -58,19 +59,19 @@ async function generateRepCard({
 
   // Use system font for all text
   // Display name (top left)
-  ctx.font = 'bold 40px sans-serif';
+  ctx.font = 'bold 40px "DejaVu Serif"';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'left';
   ctx.fillText(displayName, 240, 80);
 
   // Rep (centered below avatar, large)
-  ctx.font = 'bold 36px sans-serif';
+  ctx.font = 'bold 36px "DejaVu Serif"';
   ctx.fillStyle = '#00bfff';
   ctx.textAlign = 'center';
   ctx.fillText(`Rep: ${rep}`, 100, 220);
 
   // Level and Rank (below name)
-  ctx.font = '28px sans-serif';
+  ctx.font = '28px "DejaVu Serif"';
   ctx.fillStyle = '#ffd700';
   ctx.textAlign = 'left';
   ctx.fillText(`Level: ${level}`, 240, 130);
@@ -78,7 +79,7 @@ async function generateRepCard({
   ctx.fillText(`Rank: #${rank}`, 400, 130);
 
   // XP (above bar, left)
-  ctx.font = '24px sans-serif';
+  ctx.font = '24px "DejaVu Serif"';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'left';
   ctx.fillText(`XP: ${xp} / ${xpNeeded}`, 240, 180);
@@ -132,7 +133,7 @@ async function generateRepCard({
   }
 
   // XP percent text (inside bar, right, high contrast)
-  ctx.font = 'bold 22px sans-serif';
+  ctx.font = 'bold 22px "DejaVu Serif"';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'right';
   ctx.fillText(`${Math.floor(percent * 100)}%`, barX + barW - 10, barY + barH - 12);
