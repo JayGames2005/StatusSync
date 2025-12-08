@@ -57,11 +57,13 @@ async function generateRepCard({
     // Avatar failed to load
   }
 
-  // Display name (top left, large)
+  // Display name (top left, large, sanitized)
   ctx.font = 'bold 40px "DejaVu Serif"';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'left';
-  ctx.fillText(String(displayName), 240, 70);
+  // Only allow printable characters, fallback to 'User' if empty
+  const safeName = (typeof displayName === 'string' ? displayName : String(displayName)).replace(/[^\w\s\-\.!?@#$%^&*()\[\]{}|:;,'"<>~`+=/\\]/g, '').trim() || 'User';
+  ctx.fillText(safeName, 240, 70);
 
   // Rep (below display name, large and blue)
   ctx.font = 'bold 36px "DejaVu Serif"';
