@@ -1,6 +1,7 @@
 // repCard.js
 // Generates a rep card image using node-canvas
-const { createCanvas, loadImage } = require('canvas');
+const { createCanvas, loadImage, registerFont } = require('canvas');
+registerFont(__dirname + '/fonts/DejaVuSans.ttf', { family: 'DejaVuSans' });
 
 async function generateRepCard({
   displayName,
@@ -12,8 +13,8 @@ async function generateRepCard({
   xpNeeded = 100,
   bgColor = '#23272A'
 }) {
-  const width = 700;
-  const height = 240;
+  const width = 800;
+  const height = 300;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
@@ -56,68 +57,68 @@ async function generateRepCard({
     // Avatar failed to load
   }
 
-  // Use Arial/Sans for all text for maximum compatibility
+  // Use DejaVuSans for all text for maximum compatibility
   // Display name (top left)
-  ctx.font = 'bold 32px Arial, Sans';
+  ctx.font = 'bold 40px DejaVuSans';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'left';
-  ctx.fillText(displayName, 200, 60);
+  ctx.fillText(displayName, 240, 80);
 
   // Rep (top right)
-  ctx.font = 'bold 28px Arial, Sans';
+  ctx.font = 'bold 32px DejaVuSans';
   ctx.fillStyle = '#00bfff';
   ctx.textAlign = 'right';
-  ctx.fillText(`Rep: ${rep}`, 670, 60);
+  ctx.fillText(`Rep: ${rep}`, 760, 80);
 
   // Level and Rank (below name)
-  ctx.font = '24px Arial, Sans';
+  ctx.font = '28px DejaVuSans';
   ctx.fillStyle = '#ffd700';
   ctx.textAlign = 'left';
-  ctx.fillText(`Level: ${level}`, 200, 100);
+  ctx.fillText(`Level: ${level}`, 240, 130);
   ctx.fillStyle = '#9b59b6';
-  ctx.fillText(`Rank: #${rank}`, 350, 100);
+  ctx.fillText(`Rank: #${rank}`, 400, 130);
 
   // XP (above bar, left)
-  ctx.font = '22px Arial, Sans';
+  ctx.font = '24px DejaVuSans';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'left';
-  ctx.fillText(`XP: ${xp} / ${xpNeeded}`, 200, 150);
+  ctx.fillText(`XP: ${xp} / ${xpNeeded}`, 240, 180);
 
   // Progress bar background
   ctx.fillStyle = '#222';
   ctx.beginPath();
-  ctx.moveTo(200, 170);
-  ctx.lineTo(590, 170);
-  ctx.quadraticCurveTo(600, 170, 600, 180);
-  ctx.lineTo(600, 200);
-  ctx.quadraticCurveTo(600, 210, 590, 210);
-  ctx.lineTo(200, 210);
-  ctx.quadraticCurveTo(190, 210, 190, 200);
-  ctx.lineTo(190, 180);
-  ctx.quadraticCurveTo(190, 170, 200, 170);
+  ctx.moveTo(240, 210);
+  ctx.lineTo(700, 210);
+  ctx.quadraticCurveTo(720, 210, 720, 230);
+  ctx.lineTo(720, 260);
+  ctx.quadraticCurveTo(720, 280, 700, 280);
+  ctx.lineTo(240, 280);
+  ctx.quadraticCurveTo(220, 280, 220, 260);
+  ctx.lineTo(220, 230);
+  ctx.quadraticCurveTo(220, 210, 240, 210);
   ctx.closePath();
   ctx.fill();
   // Progress bar fill
   ctx.fillStyle = '#00bfff';
-  const barWidth = Math.max(0, Math.min(1, xp / xpNeeded)) * 400;
+  const barWidth = Math.max(0, Math.min(1, xp / xpNeeded)) * 480;
   ctx.beginPath();
-  ctx.moveTo(200, 170);
-  ctx.lineTo(200 + barWidth, 170);
-  ctx.quadraticCurveTo(200 + barWidth + 10, 170, 200 + barWidth + 10, 180);
-  ctx.lineTo(200 + barWidth + 10, 200);
-  ctx.quadraticCurveTo(200 + barWidth + 10, 210, 200 + barWidth, 210);
-  ctx.lineTo(200, 210);
-  ctx.quadraticCurveTo(190, 210, 190, 200);
-  ctx.lineTo(190, 180);
-  ctx.quadraticCurveTo(190, 170, 200, 170);
+  ctx.moveTo(240, 210);
+  ctx.lineTo(240 + barWidth, 210);
+  ctx.quadraticCurveTo(240 + barWidth + 10, 210, 240 + barWidth + 10, 230);
+  ctx.lineTo(240 + barWidth + 10, 260);
+  ctx.quadraticCurveTo(240 + barWidth + 10, 280, 240 + barWidth, 280);
+  ctx.lineTo(240, 280);
+  ctx.quadraticCurveTo(220, 280, 220, 260);
+  ctx.lineTo(220, 230);
+  ctx.quadraticCurveTo(220, 210, 240, 210);
   ctx.closePath();
   ctx.fill();
 
   // XP percent text (inside bar, right, high contrast)
-  ctx.font = 'bold 18px Arial, Sans';
+  ctx.font = 'bold 22px DejaVuSans';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'right';
-  ctx.fillText(`${Math.floor((xp / xpNeeded) * 100)}%`, 590, 195);
+  ctx.fillText(`${Math.floor((xp / xpNeeded) * 100)}%`, 690, 255);
 
   return canvas.toBuffer();
 }
