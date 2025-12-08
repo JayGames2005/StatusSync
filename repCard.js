@@ -56,21 +56,21 @@ async function generateRepCard({
     // Avatar failed to load
   }
 
-  // Use Open Sans for all text for maximum compatibility
+  // Use system font for all text
   // Display name (top left)
-  ctx.font = 'bold 40px "Open Sans"';
+  ctx.font = 'bold 40px Arial, sans-serif';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'left';
   ctx.fillText(displayName, 240, 80);
 
-  // Rep (top right)
-  ctx.font = 'bold 32px "Open Sans"';
+  // Rep (centered below avatar, large)
+  ctx.font = 'bold 36px Arial, sans-serif';
   ctx.fillStyle = '#00bfff';
-  ctx.textAlign = 'right';
-  ctx.fillText(`Rep: ${rep}`, 760, 80);
+  ctx.textAlign = 'center';
+  ctx.fillText(`Rep: ${rep}`, 100, 220);
 
   // Level and Rank (below name)
-  ctx.font = '28px "Open Sans"';
+  ctx.font = '28px Arial, sans-serif';
   ctx.fillStyle = '#ffd700';
   ctx.textAlign = 'left';
   ctx.fillText(`Level: ${level}`, 240, 130);
@@ -78,46 +78,64 @@ async function generateRepCard({
   ctx.fillText(`Rank: #${rank}`, 400, 130);
 
   // XP (above bar, left)
-  ctx.font = '24px "Open Sans"';
+  ctx.font = '24px Arial, sans-serif';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'left';
   ctx.fillText(`XP: ${xp} / ${xpNeeded}`, 240, 180);
 
-  // Progress bar background
+  // XP Progress bar background (rounded, shadow)
+  const barX = 240;
+  const barY = 220;
+  const barW = 480;
+  const barH = 40;
+  const radius = 20;
+  // Shadow
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.3)';
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.moveTo(barX + radius, barY);
+  ctx.lineTo(barX + barW - radius, barY);
+  ctx.quadraticCurveTo(barX + barW, barY, barX + barW, barY + radius);
+  ctx.lineTo(barX + barW, barY + barH - radius);
+  ctx.quadraticCurveTo(barX + barW, barY + barH, barX + barW - radius, barY + barH);
+  ctx.lineTo(barX + radius, barY + barH);
+  ctx.quadraticCurveTo(barX, barY + barH, barX, barY + barH - radius);
+  ctx.lineTo(barX, barY + radius);
+  ctx.quadraticCurveTo(barX, barY, barX + radius, barY);
+  ctx.closePath();
   ctx.fillStyle = '#222';
-  ctx.beginPath();
-  ctx.moveTo(240, 210);
-  ctx.lineTo(700, 210);
-  ctx.quadraticCurveTo(720, 210, 720, 230);
-  ctx.lineTo(720, 260);
-  ctx.quadraticCurveTo(720, 280, 700, 280);
-  ctx.lineTo(240, 280);
-  ctx.quadraticCurveTo(220, 280, 220, 260);
-  ctx.lineTo(220, 230);
-  ctx.quadraticCurveTo(220, 210, 240, 210);
-  ctx.closePath();
   ctx.fill();
-  // Progress bar fill
-  ctx.fillStyle = '#00bfff';
-  const barWidth = Math.max(0, Math.min(1, xp / xpNeeded)) * 480;
-  ctx.beginPath();
-  ctx.moveTo(240, 210);
-  ctx.lineTo(240 + barWidth, 210);
-  ctx.quadraticCurveTo(240 + barWidth + 10, 210, 240 + barWidth + 10, 230);
-  ctx.lineTo(240 + barWidth + 10, 260);
-  ctx.quadraticCurveTo(240 + barWidth + 10, 280, 240 + barWidth, 280);
-  ctx.lineTo(240, 280);
-  ctx.quadraticCurveTo(220, 280, 220, 260);
-  ctx.lineTo(220, 230);
-  ctx.quadraticCurveTo(220, 210, 240, 210);
-  ctx.closePath();
-  ctx.fill();
+  ctx.restore();
+  // Progress bar fill (gradient)
+  const percent = Math.max(0, Math.min(1, xp / xpNeeded));
+  const fillW = percent * barW;
+  if (fillW > 0) {
+    const grad = ctx.createLinearGradient(barX, barY, barX + barW, barY);
+    grad.addColorStop(0, '#00bfff');
+    grad.addColorStop(1, '#0099ff');
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(barX + radius, barY);
+    ctx.lineTo(barX + fillW - radius, barY);
+    ctx.quadraticCurveTo(barX + fillW, barY, barX + fillW, barY + radius);
+    ctx.lineTo(barX + fillW, barY + barH - radius);
+    ctx.quadraticCurveTo(barX + fillW, barY + barH, barX + fillW - radius, barY + barH);
+    ctx.lineTo(barX + radius, barY + barH);
+    ctx.quadraticCurveTo(barX, barY + barH, barX, barY + barH - radius);
+    ctx.lineTo(barX, barY + radius);
+    ctx.quadraticCurveTo(barX, barY, barX + radius, barY);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.restore();
+  }
 
   // XP percent text (inside bar, right, high contrast)
-  ctx.font = 'bold 22px "Open Sans"';
+  ctx.font = 'bold 22px Arial, sans-serif';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'right';
-  ctx.fillText(`${Math.floor((xp / xpNeeded) * 100)}%`, 690, 255);
+  ctx.fillText(`${Math.floor(percent * 100)}%`, barX + barW - 10, barY + barH - 12);
 
   return canvas.toBuffer();
 }
