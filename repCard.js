@@ -56,20 +56,21 @@ async function generateRepCard({
     // Avatar failed to load
   }
 
+  // Use Arial/Sans for all text for maximum compatibility
   // Display name (top left)
-  ctx.font = 'bold 32px "Segoe UI", Sans';
+  ctx.font = 'bold 32px Arial, Sans';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'left';
   ctx.fillText(displayName, 200, 60);
 
   // Rep (top right)
-  ctx.font = 'bold 28px "Segoe UI", Sans';
+  ctx.font = 'bold 28px Arial, Sans';
   ctx.fillStyle = '#00bfff';
   ctx.textAlign = 'right';
   ctx.fillText(`Rep: ${rep}`, 670, 60);
 
   // Level and Rank (below name)
-  ctx.font = '24px "Segoe UI", Sans';
+  ctx.font = '24px Arial, Sans';
   ctx.fillStyle = '#ffd700';
   ctx.textAlign = 'left';
   ctx.fillText(`Level: ${level}`, 200, 100);
@@ -77,13 +78,13 @@ async function generateRepCard({
   ctx.fillText(`Rank: #${rank}`, 350, 100);
 
   // XP (above bar, left)
-  ctx.font = '22px "Segoe UI", Sans';
+  ctx.font = '22px Arial, Sans';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'left';
   ctx.fillText(`XP: ${xp} / ${xpNeeded}`, 200, 150);
 
   // Progress bar background
-  ctx.fillStyle = '#444';
+  ctx.fillStyle = '#222';
   ctx.beginPath();
   ctx.moveTo(200, 170);
   ctx.lineTo(590, 170);
@@ -112,8 +113,8 @@ async function generateRepCard({
   ctx.closePath();
   ctx.fill();
 
-  // XP percent text (inside bar, right)
-  ctx.font = '18px "Segoe UI", Sans';
+  // XP percent text (inside bar, right, high contrast)
+  ctx.font = 'bold 18px Arial, Sans';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'right';
   ctx.fillText(`${Math.floor((xp / xpNeeded) * 100)}%`, 590, 195);
