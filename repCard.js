@@ -17,7 +17,7 @@ async function generateRepCard({
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
-  // Background with rounded corners
+  // Draw background first
   ctx.save();
   ctx.beginPath();
   ctx.moveTo(20, 0);
@@ -34,7 +34,7 @@ async function generateRepCard({
   ctx.fill();
   ctx.restore();
 
-  // Draw avatar with border
+  // Draw avatar with border (on left side)
   try {
     const avatar = await loadImage(avatarURL);
     ctx.save();
@@ -56,42 +56,63 @@ async function generateRepCard({
     // Avatar failed to load
   }
 
-  // Display name
+  // Display name (move down and right)
   ctx.font = 'bold 36px "Segoe UI", Sans';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'left';
-  ctx.fillText(displayName, 200, 80);
+  ctx.fillText(displayName, 200, 70);
 
   // Rep
   ctx.font = 'bold 28px "Segoe UI", Sans';
   ctx.fillStyle = '#00bfff';
-  ctx.fillText(`Rep: ${rep}`, 200, 120);
+  ctx.fillText(`Rep: ${rep}`, 200, 110);
 
   // Rank
   ctx.font = '24px "Segoe UI", Sans';
   ctx.fillStyle = '#ffd700';
-  ctx.fillText(`Rank: #${rank}`, 200, 155);
+  ctx.fillText(`Rank: #${rank}`, 200, 145);
 
   // Level
   ctx.font = '24px "Segoe UI", Sans';
   ctx.fillStyle = '#9b59b6';
-  ctx.fillText(`Level: ${level}`, 340, 155);
+  ctx.fillText(`Level: ${level}`, 340, 145);
 
   // XP
   ctx.font = '22px "Segoe UI", Sans';
   ctx.fillStyle = '#fff';
-  ctx.fillText(`XP: ${xp} / ${xpNeeded}`, 200, 190);
+  ctx.fillText(`XP: ${xp} / ${xpNeeded}`, 200, 180);
 
-  // Progress bar background
+  // Progress bar background (move up)
   ctx.fillStyle = '#444';
-  ctx.roundRect(200, 200, 400, 20, 10);
+  ctx.beginPath();
+  ctx.moveTo(200, 195);
+  ctx.lineTo(590, 195);
+  ctx.quadraticCurveTo(600, 195, 600, 205);
+  ctx.lineTo(600, 215);
+  ctx.quadraticCurveTo(600, 225, 590, 225);
+  ctx.lineTo(200, 225);
+  ctx.quadraticCurveTo(190, 225, 190, 215);
+  ctx.lineTo(190, 205);
+  ctx.quadraticCurveTo(190, 195, 200, 195);
+  ctx.closePath();
   ctx.fill();
   // Progress bar fill
   ctx.fillStyle = '#00bfff';
-  ctx.roundRect(200, 200, Math.max(0, Math.min(1, xp / xpNeeded)) * 400, 20, 10);
+  const barWidth = Math.max(0, Math.min(1, xp / xpNeeded)) * 400;
+  ctx.beginPath();
+  ctx.moveTo(200, 195);
+  ctx.lineTo(200 + barWidth, 195);
+  ctx.quadraticCurveTo(200 + barWidth + 10, 195, 200 + barWidth + 10, 205);
+  ctx.lineTo(200 + barWidth + 10, 215);
+  ctx.quadraticCurveTo(200 + barWidth + 10, 225, 200 + barWidth, 225);
+  ctx.lineTo(200, 225);
+  ctx.quadraticCurveTo(190, 225, 190, 215);
+  ctx.lineTo(190, 205);
+  ctx.quadraticCurveTo(190, 195, 200, 195);
+  ctx.closePath();
   ctx.fill();
 
-  // XP percent text
+  // XP percent text (move inside bar)
   ctx.font = '18px "Segoe UI", Sans';
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'right';
