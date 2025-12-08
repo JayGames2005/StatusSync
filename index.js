@@ -1207,7 +1207,7 @@ client.on('messageCreate', async (message) => {
             // Calculate reps left for the requesting user
             const now = new Date();
             const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
-            await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id, time TIMESTAMP)`);
+            await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
             const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [message.author.id, since]);
             const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
             // Send image as attachment with info
