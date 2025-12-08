@@ -1,3 +1,8 @@
+    if (commandName === 'imgsay') {
+        const handleImgSay = require('./imgsay-handler');
+        await handleImgSay(interaction);
+        return;
+    }
 // --- STARBOARD TRACKING TABLE ---
 async function ensureStarboardTable() {
     await db.query(`CREATE TABLE IF NOT EXISTS starboard_posts (
