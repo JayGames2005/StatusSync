@@ -851,7 +851,7 @@ const client = new Client({
             }
             return;
         }
-    });
+// Removed stray closing brace and parenthesis
 client.commands = new Collection();
 
 // --- STARBOARD FEATURE ---
@@ -950,38 +950,30 @@ client.on('messageReactionAdd', async (reaction, user) => {
                 const args = message.content.slice(1).trim().split(/ +/);
                 const command = args.shift().toLowerCase();
                 if (command && customCommands) {
-                    // List custom commands
-                    if (command === 'listcmds') {
-                        try {
+                    try {
+                        // List custom commands
+                        if (command === 'listcmds') {
                             const names = await customCommands.listCommands();
                             if (!names.length) {
                                 await message.reply('No custom commands found.');
                             } else {
                                 await message.reply('Custom commands: ' + names.map(n => '`' + n + '`').join(', '));
                             }
-                        } catch (err) {
-                            await message.reply('Error fetching custom commands: ' + err.message);
+                            return;
                         }
-                        return;
-                    }
-                    // Add custom command (admin only)
-                    if (command === 'addcmd' && message.member?.permissions.has('Administrator')) {
-                        const name = args.shift()?.toLowerCase();
-                        const response = args.join(' ');
-                        if (!name || !response) return message.reply('Usage: !addcmd <name> <response>');
-                        try {
+                        // Add custom command (admin only)
+                        if (command === 'addcmd' && message.member?.permissions.has('Administrator')) {
+                            const name = args.shift()?.toLowerCase();
+                            const response = args.join(' ');
+                            if (!name || !response) return message.reply('Usage: !addcmd <name> <response>');
                             await customCommands.addCommand(name, response);
                             await message.reply(`Custom command !${name} added!`);
-                        } catch (err) {
-                            await message.reply('Error adding custom command: ' + err.message);
+                            return;
                         }
-                        return;
-                    }
-                    // Remove custom command (admin only)
-                    if (command === 'removecmd' && message.member?.permissions.has('Administrator')) {
-                        const name = args.shift()?.toLowerCase();
-                        if (!name) return message.reply('Usage: !removecmd <name>');
-                        try {
+                        // Remove custom command (admin only)
+                        if (command === 'removecmd' && message.member?.permissions.has('Administrator')) {
+                            const name = args.shift()?.toLowerCase();
+                            if (!name) return message.reply('Usage: !removecmd <name>');
                             const exists = await customCommands.getCommand(name);
                             if (!exists) {
                                 await message.reply(`Custom command !${name} does not exist.`);
@@ -989,15 +981,16 @@ client.on('messageReactionAdd', async (reaction, user) => {
                             }
                             await customCommands.removeCommand(name);
                             await message.reply(`Custom command !${name} removed!`);
-                        } catch (err) {
-                            await message.reply('Error removing custom command: ' + err.message);
+                            return;
                         }
-                        return;
-                    }
-                    // Run custom command
-                    const cmd = await customCommands.getCommand(command);
-                    if (cmd) {
-                        await message.reply(cmd);
+                        // Run custom command
+                        const cmd = await customCommands.getCommand(command);
+                        if (cmd) {
+                            await message.reply(cmd);
+                            return;
+                        }
+                    } catch (err) {
+                        await message.reply('Custom command error: ' + err.message);
                         return;
                     }
                 }
@@ -1020,11 +1013,6 @@ client.on('messageReactionAdd', async (reaction, user) => {
         }
     }
 });
-    }
-        // XP SYSTEM: Add 30 XP for reaction given and received
-        await ensureXpTables();
-        const weekStart = getCurrentWeekStart();
-        // Award to user who gave reaction
         await db.query('INSERT INTO user_xp (user_id, xp) VALUES ($1, 30) ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + 30', [user.id]);
         const resGiver = await db.query('SELECT week_start, xp FROM user_xp_weekly WHERE user_id = $1', [user.id]);
         if (!resGiver.rows.length) {
