@@ -1,4 +1,4 @@
-    // Removed invalid top-level imgsay handler. See below for correct placement.
+// Removed invalid top-level imgsay handler. See below for correct placement.
 // --- STARBOARD TRACKING TABLE ---
 async function ensureStarboardTable() {
     await db.query(`CREATE TABLE IF NOT EXISTS starboard_posts (
@@ -851,332 +851,82 @@ const client = new Client({
             }
             return;
         }
-// Removed stray closing brace and parenthesis
-client.commands = new Collection();
+});
+    // Message handler
+    client.on('messageCreate', async (message) => {
+        if (message.author.bot || !message.guild) return;
 
-// --- STARBOARD FEATURE ---
-client.on('messageReactionAdd', async (reaction, user) => {
-    await ensureStarboardTable();
-    try {
-        // Only in guilds
-        if (!reaction.message.guild) return;
-        // Fetch full reaction/message if partial
-        if (reaction.partial) await reaction.fetch();
-        if (reaction.message.partial) await reaction.message.fetch();
-        // Get starboard settings from DB
-        await db.query(`CREATE TABLE IF NOT EXISTS starboard_settings (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32), emoji TEXT, threshold INTEGER)`);
-        const settingsRes = await db.query('SELECT * FROM starboard_settings WHERE guild_id = $1', [reaction.message.guild.id]);
-        if (!settingsRes.rows.length) return;
-        const { channel_id, emoji, threshold } = settingsRes.rows[0];
-        // Debug: log emoji info
-        console.log('[Starboard] Reaction emoji:', {
-            name: reaction.emoji.name,
-            id: reaction.emoji.id,
-            identifier: reaction.emoji.identifier,
-            unicode: reaction.emoji.toString(),
-            config: emoji
-        });
-        // Match Unicode or custom emoji
-        const isUnicode = !reaction.emoji.id;
-        let emojiMatch = false;
-        if (isUnicode) {
-            // Unicode emoji: match by character or name
-            emojiMatch = (reaction.emoji.name === emoji || reaction.emoji.toString() === emoji);
-        } else {
-            // Custom emoji: match by name or id
-            emojiMatch = (reaction.emoji.name === emoji || reaction.emoji.id === emoji);
+        // XP SYSTEM: Add XP for every message (5 for text, 10 for sticker)
+        await ensureXpTables();
+        let xpToAdd = 0;
+        if (message.stickers && message.stickers.size > 0) {
+            xpToAdd = 10;
+        } else if (message.content && message.content.length > 0) {
+            xpToAdd = 5;
         }
-        if (!emojiMatch) return;
-        // Only trigger when threshold is met
-        if (reaction.count < threshold) return;
-        // Find the configured starboard channel
-        let starboard = reaction.message.guild.channels.cache.get(channel_id);
-        // Debug: log channel info
-        console.log('[Starboard] Looking for channel_id:', channel_id);
-        if (!starboard) {
-            console.log('[Starboard] Channel not found in cache. Available text channels:');
-            reaction.message.guild.channels.cache.filter(c => c.isTextBased && c.isTextBased()).forEach(c => {
-                console.log(`- ${c.name} (${c.id})`);
-            });
-        } else {
-            console.log('[Starboard] Found channel:', starboard.name, starboard.id);
+        if (xpToAdd > 0) {
+            await db.query('INSERT INTO user_xp (user_id, xp) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + $2', [message.author.id, xpToAdd]);
+            // Weekly XP: use week_start and reset on new week
+            const weekStart = getCurrentWeekStart();
+            const res = await db.query('SELECT week_start, xp FROM user_xp_weekly WHERE user_id = $1', [message.author.id]);
+            if (!res.rows.length) {
+                await db.query('INSERT INTO user_xp_weekly (user_id, xp, week_start) VALUES ($1, $2, $3)', [message.author.id, xpToAdd, weekStart]);
+            } else if (res.rows[0].week_start !== weekStart) {
+                await db.query('UPDATE user_xp_weekly SET xp = $1, week_start = $2 WHERE user_id = $3', [xpToAdd, weekStart, message.author.id]);
+            } else {
+                await db.query('UPDATE user_xp_weekly SET xp = xp + $1 WHERE user_id = $2', [xpToAdd, message.author.id]);
+            }
         }
-        if (!starboard || !starboard.isTextBased || !starboard.isTextBased()) return;
-        // Prevent duplicate posts (by checking if already posted)
-        const fetched = await starboard.messages.fetch({ limit: 100 });
-        if (fetched.some(m => m.embeds[0]?.footer?.text?.includes(reaction.message.id))) return;
-        // Build embed
-        const embed = {
-            color: 0xffd700,
-            author: {
-                name: reaction.message.author.tag,
-                icon_url: reaction.message.author.displayAvatarURL()
-            },
-            description: reaction.message.content || '[No text]',
-            fields: [
-                { name: 'Jump to Message', value: `[Go to message](${reaction.message.url})` }
-            ],
-            footer: { text: `${emoji} ${reaction.count} | ${reaction.message.id}` },
-            timestamp: new Date(reaction.message.createdTimestamp)
-        };
-        // Attach image if present
-        client.on('messageCreate', async (message) => {
-            if (message.author.bot || !message.guild) return;
 
-            // XP SYSTEM: Add XP for every message (5 for text, 10 for sticker)
-            await ensureXpTables();
-            let xpToAdd = 0;
-            if (message.stickers && message.stickers.size > 0) {
-                xpToAdd = 10;
-            } else if (message.content && message.content.length > 0) {
-                xpToAdd = 5;
-            }
-            if (xpToAdd > 0) {
-                await db.query('INSERT INTO user_xp (user_id, xp) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + $2', [message.author.id, xpToAdd]);
-                // Weekly XP: use week_start and reset on new week
-                const weekStart = getCurrentWeekStart();
-                const res = await db.query('SELECT week_start, xp FROM user_xp_weekly WHERE user_id = $1', [message.author.id]);
-                if (!res.rows.length) {
-                    await db.query('INSERT INTO user_xp_weekly (user_id, xp, week_start) VALUES ($1, $2, $3)', [message.author.id, xpToAdd, weekStart]);
-                } else if (res.rows[0].week_start !== weekStart) {
-                    await db.query('UPDATE user_xp_weekly SET xp = $1, week_start = $2 WHERE user_id = $3', [xpToAdd, weekStart, message.author.id]);
-                } else {
-                    await db.query('UPDATE user_xp_weekly SET xp = xp + $1 WHERE user_id = $2', [xpToAdd, message.author.id]);
-                }
-            }
-
-            // Custom command handling for prefix commands
-            if (message.content.startsWith('!')) {
-                const args = message.content.slice(1).trim().split(/ +/);
-                const command = args.shift().toLowerCase();
-                if (command && customCommands) {
-                    try {
-                        // List custom commands
-                        if (command === 'listcmds') {
-                            const names = await customCommands.listCommands();
-                            if (!names.length) {
-                                await message.reply('No custom commands found.');
-                            } else {
-                                await message.reply('Custom commands: ' + names.map(n => '`' + n + '`').join(', '));
-                            }
-                            return;
+        // Custom command handling for prefix commands
+        if (message.content.startsWith('!')) {
+            const args = message.content.slice(1).trim().split(/ +/);
+            const command = args.shift().toLowerCase();
+            if (command && customCommands) {
+                try {
+                    // List custom commands
+                    if (command === 'listcmds') {
+                        const names = await customCommands.listCommands();
+                        if (!names.length) {
+                            await message.reply('No custom commands found.');
+                        } else {
+                            await message.reply('Custom commands: ' + names.map(n => '`' + n + '`').join(', '));
                         }
-                        // Add custom command (admin only)
-                        if (command === 'addcmd' && message.member?.permissions.has('Administrator')) {
-                            const name = args.shift()?.toLowerCase();
-                            const response = args.join(' ');
-                            if (!name || !response) return message.reply('Usage: !addcmd <name> <response>');
-                            await customCommands.addCommand(name, response);
-                            await message.reply(`Custom command !${name} added!`);
-                            return;
-                        }
-                        // Remove custom command (admin only)
-                        if (command === 'removecmd' && message.member?.permissions.has('Administrator')) {
-                            const name = args.shift()?.toLowerCase();
-                            if (!name) return message.reply('Usage: !removecmd <name>');
-                            const exists = await customCommands.getCommand(name);
-                            if (!exists) {
-                                await message.reply(`Custom command !${name} does not exist.`);
-                                return;
-                            }
-                            await customCommands.removeCommand(name);
-                            await message.reply(`Custom command !${name} removed!`);
-                            return;
-                        }
-                        // Run custom command
-                        const cmd = await customCommands.getCommand(command);
-                        if (cmd) {
-                            await message.reply(cmd);
-                            return;
-                        }
-                    } catch (err) {
-                        await message.reply('Custom command error: ' + err.message);
                         return;
                     }
+                    // Add custom command (admin only)
+                    if (command === 'addcmd' && message.member?.permissions.has('Administrator')) {
+                        const name = args.shift()?.toLowerCase();
+                        const response = args.join(' ');
+                        if (!name || !response) return message.reply('Usage: !addcmd <name> <response>');
+                        await customCommands.addCommand(name, response);
+                        await message.reply(`Custom command !${name} added!`);
+                        return;
+                    }
+                    // Remove custom command (admin only)
+                    if (command === 'removecmd' && message.member?.permissions.has('Administrator')) {
+                        const name = args.shift()?.toLowerCase();
+                        if (!name) return message.reply('Usage: !removecmd <name>');
+                        const exists = await customCommands.getCommand(name);
+                        if (!exists) {
+                            await message.reply(`Custom command !${name} does not exist.`);
+                            return;
+                        }
+                        await customCommands.removeCommand(name);
+                        await message.reply(`Custom command !${name} removed!`);
+                        return;
+                    }
+                    // Run custom command
+                    const cmd = await customCommands.getCommand(command);
+                    if (cmd) {
+                        await message.reply(cmd);
+                        return;
+                    }
+                } catch (err) {
+                    await message.reply('Custom command error: ' + err.message);
+                    return;
                 }
             }
-        });
-    } else if (message.content && message.content.length > 0) {
-        xpToAdd = 5;
-    }
-    if (xpToAdd > 0) {
-        await db.query('INSERT INTO user_xp (user_id, xp) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + $2', [message.author.id, xpToAdd]);
-        // Weekly XP: use week_start and reset on new week
-        const weekStart = getCurrentWeekStart();
-        const res = await db.query('SELECT week_start, xp FROM user_xp_weekly WHERE user_id = $1', [message.author.id]);
-        if (!res.rows.length) {
-            await db.query('INSERT INTO user_xp_weekly (user_id, xp, week_start) VALUES ($1, $2, $3)', [message.author.id, xpToAdd, weekStart]);
-        } else if (res.rows[0].week_start !== weekStart) {
-            await db.query('UPDATE user_xp_weekly SET xp = $1, week_start = $2 WHERE user_id = $3', [xpToAdd, weekStart, message.author.id]);
-        } else {
-            await db.query('UPDATE user_xp_weekly SET xp = xp + $1 WHERE user_id = $2', [xpToAdd, message.author.id]);
         }
-    }
-});
-        await db.query('INSERT INTO user_xp (user_id, xp) VALUES ($1, 30) ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + 30', [user.id]);
-        const resGiver = await db.query('SELECT week_start, xp FROM user_xp_weekly WHERE user_id = $1', [user.id]);
-        if (!resGiver.rows.length) {
-            await db.query('INSERT INTO user_xp_weekly (user_id, xp, week_start) VALUES ($1, 30, $2)', [user.id, weekStart]);
-        } else if (resGiver.rows[0].week_start !== weekStart) {
-            await db.query('UPDATE user_xp_weekly SET xp = 30, week_start = $1 WHERE user_id = $2', [weekStart, user.id]);
-        } else {
-            await db.query('UPDATE user_xp_weekly SET xp = xp + 30 WHERE user_id = $1', [user.id]);
-        }
-        // Award to message author (if not bot)
-        if (reaction.message.author && !reaction.message.author.bot) {
-            await db.query('INSERT INTO user_xp (user_id, xp) VALUES ($1, 30) ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + 30', [reaction.message.author.id]);
-            const resAuthor = await db.query('SELECT week_start, xp FROM user_xp_weekly WHERE user_id = $1', [reaction.message.author.id]);
-            if (!resAuthor.rows.length) {
-                await db.query('INSERT INTO user_xp_weekly (user_id, xp, week_start) VALUES ($1, 30, $2)', [reaction.message.author.id, weekStart]);
-            } else if (resAuthor.rows[0].week_start !== weekStart) {
-                await db.query('UPDATE user_xp_weekly SET xp = 30, week_start = $1 WHERE user_id = $2', [weekStart, reaction.message.author.id]);
-            } else {
-                await db.query('UPDATE user_xp_weekly SET xp = xp + 30 WHERE user_id = $1', [reaction.message.author.id]);
-            }
-        }
-    if (command === 'xpleaderboard') {
-        // All-time XP leaderboard
-        try {
-            const members = message.guild.members.cache;
-            const res = await db.query('SELECT user_id, xp FROM user_xp ORDER BY xp DESC LIMIT 10');
-            if (!res.rows.length) {
-                console.error('XP Leaderboard DB result:', res);
-                message.channel.send('No XP data found.');
-                return;
-            }
-            const leaderboard = res.rows.map((row, i) => {
-                let member = members.get(row.user_id);
-                let name = member ? member.displayName : `<@${row.user_id}>`;
-                return `#${i+1} - ${name}: **${row.xp} XP**`;
-            });
-            const embed = {
-                color: 0x3498db,
-                title: 'All-Time XP Leaderboard',
-                description: leaderboard.join('\n'),
-            };
-            message.channel.send({ embeds: [embed] });
-        } catch (err) {
-            console.error('XP Leaderboard error:', err);
-            message.channel.send('Error fetching XP leaderboard: ' + err.message);
-        }
-        return;
-    }
-    if (command === 'xpweekly') {
-        // Weekly XP leaderboard
-        try {
-            const members = message.guild.members.cache;
-            const weekStart = getCurrentWeekStart();
-            const res = await db.query('SELECT user_id, xp FROM user_xp_weekly WHERE week_start = $1 ORDER BY xp DESC LIMIT 10', [weekStart]);
-            if (!res.rows.length) {
-                console.error('Weekly XP Leaderboard DB result:', res);
-                message.channel.send('No weekly XP data found.');
-                return;
-            }
-            const leaderboard = res.rows.map((row, i) => {
-                let member = members.get(row.user_id);
-                let name = member ? member.displayName : `<@${row.user_id}>`;
-                return `#${i+1} - ${name}: **${row.xp} XP**`;
-            });
-            const embed = {
-                color: 0x2ecc71,
-                title: 'Weekly XP Leaderboard',
-                description: leaderboard.join('\n'),
-                footer: { text: 'Resets every Monday 11am EST' }
-            };
-            message.channel.send({ embeds: [embed] });
-        } catch (err) {
-            console.error('Weekly XP Leaderboard error:', err);
-            message.channel.send('Error fetching weekly XP leaderboard: ' + err.message);
-        }
-        return;
-    }
-    if (command === 'repleaderboard') {
-        try {
-            const members = message.guild.members.cache;
-            const res = await db.query('SELECT user_id, rep FROM user_rep ORDER BY rep DESC LIMIT 10');
-            if (!res.rows.length) {
-                message.channel.send('No reputation data found.');
-                return;
-            }
-            const leaderboard = res.rows.map((row, i) => {
-                let member = members.get(row.user_id);
-                let name = member ? member.displayName : `<@${row.user_id}>`;
-                return `#${i+1} - ${name}: **${row.rep}**`;
-            });
-            const embed = {
-                color: 0xf1c40f,
-                title: 'Rep Leaderboard',
-                description: leaderboard.join('\n'),
-            };
-            message.channel.send({ embeds: [embed] });
-        } catch (err) {
-            console.error(err);
-            message.channel.send('Error fetching leaderboard: ' + err.message);
-        }
-        return;
-    }
-    if (message.author.bot || !message.guild) return;
-    if (!message.content.startsWith('!')) return;
-        if (command === 'negrep') {
-            // Usage: !negrep @user [amount]
-            if (!message.mentions.users.size) return message.reply('Usage: !negrep @user [amount] (amount can be -1 or -2)');
-            const user = message.mentions.users.first();
-            let amount = -1;
-            if (args.length && /^-\d+$/.test(args[0])) {
-                amount = parseInt(args.shift(), 10);
-            }
-            const validAmounts = [-1, -2];
-            if (!validAmounts.includes(amount)) {
-                return message.reply('Amount must be -1 or -2');
-            }
-            if (user.id === message.author.id) {
-                return message.reply('You cannot neg rep yourself!');
-            }
-            // Limit: 2 rep actions per 12 hours
-            const now = new Date();
-            const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
-            await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
-            const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [message.author.id, since]);
-            const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
-            if (repsLeft <= 0) {
-                return message.reply('You can only give rep 2 times every 12 hours.');
-            }
-            if (Math.abs(amount) > repsLeft) {
-                return message.reply(`You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`);
-            }
-            let displayName = user.username;
-            if (message.guild) {
-                const member = await message.guild.members.fetch(user.id).catch(() => null);
-                if (member && member.displayName) displayName = member.displayName;
-            }
-            try {
-                await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2)
-                    ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
-                for (let i = 0; i < Math.abs(amount); i++) {
-                    await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [message.author.id, now]);
-                }
-                const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
-                const newRep = result.rows.length ? result.rows[0].rep : amount;
-                const embed = {
-                    color: 0xff0000,
-                    title: `${displayName} now has ${newRep} rep!`,
-                    description: `Rep change: ${amount}`,
-                    thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
-                };
-                message.channel.send({ embeds: [embed] });
-            } catch (err) {
-                console.error(err);
-                message.channel.send('Error updating rep: ' + err.message);
-            }
-            return;
-        }
-    // Built-in commands above
-    // Custom command from database
-    const customCmdResponse = await customCommands.getCommand(command);
-    if (customCmdResponse) {
-        await message.reply(customCmdResponse);
-        return;
-    }
     });
-
     client.login(process.env.BOT_TOKEN);
