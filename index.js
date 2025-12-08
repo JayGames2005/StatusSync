@@ -881,12 +881,136 @@ const client = new Client({
             }
         }
 
-        // Custom command handling for prefix commands
+        // Prefix command handling (!rep, !addrep, !negrep, custom commands)
         if (message.content.startsWith('!')) {
             const args = message.content.slice(1).trim().split(/ +/);
             const command = args.shift().toLowerCase();
-            if (command && customCommands) {
-                try {
+            try {
+                // !rep [@user]
+                if (command === 'rep') {
+                    let user = message.mentions.users.first() || message.author;
+                    let displayName = user.username;
+                    let avatarURL = user.displayAvatarURL ? user.displayAvatarURL({ extension: 'png', size: 128 }) : user.avatarURL;
+                    if (message.guild) {
+                        const member = await message.guild.members.fetch(user.id).catch(() => null);
+                        if (member && member.displayName) displayName = member.displayName;
+                        if (member && member.user && member.user.displayAvatarURL) avatarURL = member.user.displayAvatarURL({ extension: 'png', size: 128 });
+                    }
+                    try {
+                        const repRes = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+                        const userRep = repRes.rows.length ? repRes.rows[0].rep : 0;
+                        const xpRes = await db.query('SELECT xp FROM user_xp WHERE user_id = $1', [user.id]);
+                        const xp = xpRes.rows.length ? xpRes.rows[0].xp : 0;
+                        const level = Math.floor(0.1 * Math.sqrt(xp));
+                        const xpNeeded = Math.floor(Math.pow((level + 1) / 0.1, 2)) - Math.floor(Math.pow(level / 0.1, 2));
+                        const xpCurrent = xp - Math.floor(Math.pow(level / 0.1, 2));
+                        const rankRes = await db.query('SELECT user_id FROM user_rep ORDER BY rep DESC');
+                        let rank = 1;
+                        if (rankRes.rows.length) {
+                            rank = rankRes.rows.findIndex(row => row.user_id === user.id) + 1;
+                            if (rank < 1) rank = 1;
+                        }
+                        let bgColor = '#23272A';
+                        const bgRes = await db.query('SELECT background_color FROM user_rep_settings WHERE user_id = $1', [user.id]);
+                        const colorMap = {
+                            blue: '#3498db', red: '#e74c3c', black: '#23272A', white: '#ecf0f1', green: '#2ecc71', purple: '#9b59b6', orange: '#e67e22'
+                        };
+                        if (bgRes.rows.length && bgRes.rows[0].background_color && colorMap[bgRes.rows[0].background_color]) {
+                            bgColor = colorMap[bgRes.rows[0].background_color];
+                        }
+                        const { generateRepCard } = require('./repCard');
+                        const buffer = await generateRepCard({ displayName, username: user.username, avatarURL, rep: userRep, rank, level, xp: xpCurrent, xpNeeded, bgColor });
+                        await message.reply({ files: [{ attachment: buffer, name: 'rep_card.png' }] });
+                    } catch (err) {
+                        await message.reply('Error fetching rep: ' + err.message);
+                    }
+                    return;
+                }
+
+                // !addrep @user [amount] (everyone can use)
+                if (command === 'addrep') {
+                    const user = message.mentions.users.first();
+                    if (!user) return message.reply('You must mention a user to give rep to!');
+                    let amount = 1;
+                    if (args.length && /^[-+]?\d+$/.test(args[0])) amount = parseInt(args.shift(), 10);
+                    const validAmounts = [1, -1, 2, -2];
+                    if (!validAmounts.includes(amount)) return message.reply('Amount must be one of: 1, -1, 2, -2');
+                    if (user.id === message.author.id) return message.reply('You cannot rep yourself!');
+                    const now = new Date();
+                    const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+                    await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
+                    const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [message.author.id, since]);
+                    const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
+                    if (repsLeft <= 0) return message.reply('You can only give rep 2 times every 12 hours.');
+                    if (Math.abs(amount) > repsLeft) return message.reply(`You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`);
+                    let displayName = user.username;
+                    if (message.guild) {
+                        const member = await message.guild.members.fetch(user.id).catch(() => null);
+                        if (member && member.displayName) displayName = member.displayName;
+                    }
+                    try {
+                        await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
+                        for (let i = 0; i < Math.abs(amount); i++) {
+                            await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [message.author.id, now]);
+                        }
+                        const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+                        const newRep = result.rows.length ? result.rows[0].rep : amount;
+                        const embed = {
+                            color: amount > 0 ? 0x00ff00 : 0xff0000,
+                            title: `${displayName} now has ${newRep} rep!`,
+                            description: `Rep change: ${amount > 0 ? '+' : ''}${amount}`,
+                            thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
+                        };
+                        await message.reply({ embeds: [embed] });
+                    } catch (err) {
+                        await message.reply('Error updating rep: ' + err.message);
+                    }
+                    return;
+                }
+
+                // !negrep @user [amount] (everyone can use)
+                if (command === 'negrep') {
+                    const user = message.mentions.users.first();
+                    if (!user) return message.reply('You must mention a user to give neg rep to!');
+                    let amount = -1;
+                    if (args.length && /^-\d+$/.test(args[0])) amount = parseInt(args.shift(), 10);
+                    const validAmounts = [-1, -2];
+                    if (!validAmounts.includes(amount)) return message.reply('Amount must be -1 or -2');
+                    if (user.id === message.author.id) return message.reply('You cannot neg rep yourself!');
+                    const now = new Date();
+                    const since = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+                    await db.query(`CREATE TABLE IF NOT EXISTS rep_give_log (giver_id VARCHAR(32), time TIMESTAMP)`);
+                    const logRes = await db.query('SELECT COUNT(*) FROM rep_give_log WHERE giver_id = $1 AND time > $2', [message.author.id, since]);
+                    const repsLeft = Math.max(0, 2 - parseInt(logRes.rows[0].count));
+                    if (repsLeft <= 0) return message.reply('You can only give rep 2 times every 12 hours.');
+                    if (Math.abs(amount) > repsLeft) return message.reply(`You only have ${repsLeft} rep action${repsLeft === 1 ? '' : 's'} left.`);
+                    let displayName = user.username;
+                    if (message.guild) {
+                        const member = await message.guild.members.fetch(user.id).catch(() => null);
+                        if (member && member.displayName) displayName = member.displayName;
+                    }
+                    try {
+                        await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
+                        for (let i = 0; i < Math.abs(amount); i++) {
+                            await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [message.author.id, now]);
+                        }
+                        const result = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+                        const newRep = result.rows.length ? result.rows[0].rep : amount;
+                        const embed = {
+                            color: 0xff0000,
+                            title: `${displayName} now has ${newRep} rep!`,
+                            description: `Rep change: ${amount}`,
+                            thumbnail: { url: user.displayAvatarURL ? user.displayAvatarURL() : user.avatarURL },
+                        };
+                        await message.reply({ embeds: [embed] });
+                    } catch (err) {
+                        await message.reply('Error updating rep: ' + err.message);
+                    }
+                    return;
+                }
+
+                // Custom command management and execution
+                if (command && customCommands) {
                     // List custom commands
                     if (command === 'listcmds') {
                         const names = await customCommands.listCommands();
@@ -925,10 +1049,9 @@ const client = new Client({
                         await message.reply(cmd);
                         return;
                     }
-                } catch (err) {
-                    await message.reply('Custom command error: ' + err.message);
-                    return;
                 }
+            } catch (err) {
+                await message.reply('Command error: ' + err.message);
             }
         }
     });
