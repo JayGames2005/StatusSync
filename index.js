@@ -1617,6 +1617,12 @@ client.on('messageCreate', async (message) => {
         if (!message.mentions.users.size) return message.reply('Usage: !negrep @user [amount] (amount can be -1 or -2)');
         const user = message.mentions.users.first();
         let amount = -1;
-        if (args.length && /^-\d+$/.test(args[0])) {
-            amount = parseInt(args.shift(), 10);
-       
+           if (args.length && /^-\d+$/.test(args[0])) {
+               amount = parseInt(args.shift(), 10);
+           }
+           // ...existing negrep logic...
+       }
+    // ...existing code...
+    });
+
+    client.login(process.env.BOT_TOKEN);
