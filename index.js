@@ -1199,6 +1199,7 @@ client.on('messageCreate', async (message) => {
             const { generateRepCard } = require('./repCard');
             const buffer = await generateRepCard({
                 displayName,
+                username: user.username,
                 avatarURL,
                 rep: userRep,
                 rank,
