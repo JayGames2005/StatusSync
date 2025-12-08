@@ -20,7 +20,68 @@ async function ensureXpTables() {
     )`);
     await db.query(`CREATE TABLE IF NOT EXISTS user_xp_weekly (
         user_id VARCHAR(32) PRIMARY KEY,
-    // Removed stray closing braces and duplicate event handler to fix syntax errors.
+        xp INTEGER DEFAULT 0,
+        week_start DATE
+    )`);
+}
+
+// Helper to get start of current week (Monday 11am EST)
+function getCurrentWeekStart() {
+    const now = new Date();
+    // Convert to EST (UTC-5 or UTC-4 DST, but we use UTC-5 for simplicity)
+    const utc = new Date(now.getTime() + now.getTimezoneOffset() * 60000);
+    let est = new Date(utc.getTime() - (5 * 60 * 60 * 1000));
+    // Set to Monday 11am
+    est.setUTCHours(16, 0, 0, 0); // 11am EST = 16:00 UTC
+    est.setUTCDate(est.getUTCDate() - ((est.getUTCDay() + 6) % 7));
+    return est.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+require('dotenv').config();
+const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+// Register slash commands
+const commands = [
+    new SlashCommandBuilder()
+        .setName('ask')
+        .setDescription('Ask the AI a question')
+        .addStringOption(option => option.setName('question').setDescription('Your question').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('resetweeklyxp')
+        .setDescription('Admin: Reset weekly XP for all users')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
+        .setName('starboardleaderboard')
+        .setDescription('Show the top users and messages on the starboard')
+        .setName('setstarboard')
+        .setDescription('Configure the starboard channel, emoji, and threshold')
+        .addChannelOption(option => option.setName('channel').setDescription('Starboard channel').setRequired(true))
+        .addStringOption(option => option.setName('emoji').setDescription('Emoji to use (default: ⭐)').setRequired(false))
+        .addIntegerOption(option => option.setName('threshold').setDescription('Reactions needed (default: 3)').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
+        .setName('teststarboard')
+        .setDescription('Admin: Test the starboard by reposting a message to #starboard')
+        .addStringOption(option => option.setName('message').setDescription('Message link or ID').setRequired(true))
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
+        .setName('xpleaderboard')
+        .setDescription('Show the all-time XP leaderboard'),
+    new SlashCommandBuilder()
+        .setName('xpweekly')
+        .setDescription('Show the weekly XP leaderboard (resets every Monday 11am EST)'),
+    new SlashCommandBuilder()
+        .setName('repleaderboard')
+        .setDescription('Show the top users with the highest reputation'),
+    new SlashCommandBuilder()
+        .setName('setwelcome')
+        .setDescription('Set the welcome channel for this server')
+        .addChannelOption(option => option.setName('channel').setDescription('Welcome channel').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('setupdb')
+        .setDescription('Create all necessary database tables for StatusSync')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
+        .setName('rep')
         .setDescription('Show your or another user\'s reputation')
         .addUserOption(option => option.setName('user').setDescription('User to check').setRequired(false)),
     new SlashCommandBuilder()
