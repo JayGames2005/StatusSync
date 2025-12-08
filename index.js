@@ -989,18 +989,47 @@ client.on('messageCreate', async (message) => {
     if (!message.content.startsWith('!')) return;
     const args = message.content.slice(1).trim().split(/ +/);
     const command = args.shift().toLowerCase();
-    // XP SYSTEM: Add XP for every message (no level up messages)
+    // XP SYSTEM: Add XP for every message (5 for text, 10 for sticker)
     await ensureXpTables();
-    await db.query('INSERT INTO user_xp (user_id, xp) VALUES ($1, 1) ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + 1', [message.author.id]);
-    // Weekly XP
-    const weekStart = getCurrentWeekStart();
-    const res = await db.query('SELECT week_start FROM user_xp_weekly WHERE user_id = $1', [message.author.id]);
-    if (!res.rows.length || res.rows[0].week_start !== weekStart) {
-        // New week or new user: reset
-        await db.query('INSERT INTO user_xp_weekly (user_id, xp, week_start) VALUES ($1, 1, $2) ON CONFLICT (user_id) DO UPDATE SET xp = 1, week_start = $2', [message.author.id, weekStart]);
-    } else {
-        await db.query('UPDATE user_xp_weekly SET xp = xp + 1 WHERE user_id = $1', [message.author.id]);
+    let xpToAdd = 0;
+    if (message.stickers && message.stickers.size > 0) {
+        xpToAdd = 10;
+    } else if (message.content && message.content.length > 0) {
+        xpToAdd = 5;
     }
+    if (xpToAdd > 0) {
+        await db.query('INSERT INTO user_xp (user_id, xp) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + $2', [message.author.id, xpToAdd]);
+        // Weekly XP
+        const weekStart = getCurrentWeekStart();
+        const res = await db.query('SELECT week_start FROM user_xp_weekly WHERE user_id = $1', [message.author.id]);
+        if (!res.rows.length || res.rows[0].week_start !== weekStart) {
+            // New week or new user: reset
+            await db.query('INSERT INTO user_xp_weekly (user_id, xp, week_start) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET xp = $2, week_start = $3', [message.author.id, xpToAdd, weekStart]);
+        } else {
+            await db.query('UPDATE user_xp_weekly SET xp = xp + $2 WHERE user_id = $1', [message.author.id, xpToAdd]);
+        }
+    }
+        // XP SYSTEM: Add 30 XP for reaction given and received
+        await ensureXpTables();
+        // Award to user who gave reaction
+        await db.query('INSERT INTO user_xp (user_id, xp) VALUES ($1, 30) ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + 30', [user.id]);
+        const weekStart = getCurrentWeekStart();
+        const resGiver = await db.query('SELECT week_start FROM user_xp_weekly WHERE user_id = $1', [user.id]);
+        if (!resGiver.rows.length || resGiver.rows[0].week_start !== weekStart) {
+            await db.query('INSERT INTO user_xp_weekly (user_id, xp, week_start) VALUES ($1, 30, $2) ON CONFLICT (user_id) DO UPDATE SET xp = 30, week_start = $2', [user.id, weekStart]);
+        } else {
+            await db.query('UPDATE user_xp_weekly SET xp = xp + 30 WHERE user_id = $1', [user.id]);
+        }
+        // Award to message author (if not bot)
+        if (reaction.message.author && !reaction.message.author.bot) {
+            await db.query('INSERT INTO user_xp (user_id, xp) VALUES ($1, 30) ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + 30', [reaction.message.author.id]);
+            const resAuthor = await db.query('SELECT week_start FROM user_xp_weekly WHERE user_id = $1', [reaction.message.author.id]);
+            if (!resAuthor.rows.length || resAuthor.rows[0].week_start !== weekStart) {
+                await db.query('INSERT INTO user_xp_weekly (user_id, xp, week_start) VALUES ($1, 30, $2) ON CONFLICT (user_id) DO UPDATE SET xp = 30, week_start = $2', [reaction.message.author.id, weekStart]);
+            } else {
+                await db.query('UPDATE user_xp_weekly SET xp = xp + 30 WHERE user_id = $1', [reaction.message.author.id]);
+            }
+        }
     if (command === 'xpleaderboard') {
         // All-time XP leaderboard
         try {
