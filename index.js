@@ -46,6 +46,10 @@ const commands = [
         .setDescription('Ask the AI a question')
         .addStringOption(option => option.setName('question').setDescription('Your question').setRequired(true)),
     new SlashCommandBuilder()
+        .setName('resetweeklyxp')
+        .setDescription('Admin: Reset weekly XP for all users')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
         .setName('starboardleaderboard')
         .setDescription('Show the top users and messages on the starboard')
         .setName('setstarboard')
@@ -180,6 +184,21 @@ const client = new Client({
 
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
+                        // /resetweeklyxp command (admin only)
+                        if (interaction.commandName === 'resetweeklyxp') {
+                            if (!interaction.member.permissions.has('Administrator')) {
+                                await interaction.reply({ content: 'You need Administrator permission to use this command.', flags: 64 });
+                                return;
+                            }
+                            try {
+                                await db.query('UPDATE user_xp_weekly SET xp = 0');
+                                await interaction.reply({ content: 'Weekly XP has been reset for all users.', flags: 64 });
+                            } catch (err) {
+                                console.error(err);
+                                await interaction.reply({ content: 'Error resetting weekly XP: ' + err.message, flags: 64 });
+                            }
+                            return;
+                        }
                 // /imgsay command
                 if (interaction.commandName === 'imgsay') {
                     const handleImgSay = require('./imgsay-handler');
@@ -999,17 +1018,11 @@ client.on('messageCreate', async (message) => {
     }
     if (xpToAdd > 0) {
         await db.query('INSERT INTO user_xp (user_id, xp) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + $2', [message.author.id, xpToAdd]);
-        // Weekly XP
-        const weekStart = getCurrentWeekStart();
-        const res = await db.query('SELECT week_start FROM user_xp_weekly WHERE user_id = $1', [message.author.id]);
+        // Weekly XP: always increment like normal XP
+        const res = await db.query('SELECT xp FROM user_xp_weekly WHERE user_id = $1', [message.author.id]);
         if (!res.rows.length) {
-            // New user: set XP to current value
-            await db.query('INSERT INTO user_xp_weekly (user_id, xp, week_start) VALUES ($1, $2, $3)', [message.author.id, xpToAdd, weekStart]);
-        } else if (res.rows[0].week_start !== weekStart) {
-            // New week: reset XP to current value and update week_start
-            await db.query('UPDATE user_xp_weekly SET xp = $1, week_start = $2 WHERE user_id = $3', [xpToAdd, weekStart, message.author.id]);
+            await db.query('INSERT INTO user_xp_weekly (user_id, xp) VALUES ($1, $2)', [message.author.id, xpToAdd]);
         } else {
-            // Accumulate XP for the week
             await db.query('UPDATE user_xp_weekly SET xp = xp + $1 WHERE user_id = $2', [xpToAdd, message.author.id]);
         }
     }
