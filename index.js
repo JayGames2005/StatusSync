@@ -869,18 +869,18 @@ client.on('messageCreate', async (message) => {
     if (command === 'xpleaderboard') {
         // All-time XP leaderboard
         try {
-            const members = await message.guild.members.fetch();
+            const members = message.guild.members.cache;
             const res = await db.query('SELECT user_id, xp FROM user_xp ORDER BY xp DESC LIMIT 10');
             if (!res.rows.length) {
                 console.error('XP Leaderboard DB result:', res);
                 message.channel.send('No XP data found.');
                 return;
             }
-            const leaderboard = await Promise.all(res.rows.map(async (row, i) => {
+            const leaderboard = res.rows.map((row, i) => {
                 let member = members.get(row.user_id);
                 let name = member ? member.displayName : `<@${row.user_id}>`;
                 return `#${i+1} - ${name}: **${row.xp} XP**`;
-            }));
+            });
             const embed = {
                 color: 0x3498db,
                 title: 'All-Time XP Leaderboard',
@@ -896,7 +896,7 @@ client.on('messageCreate', async (message) => {
     if (command === 'xpweekly') {
         // Weekly XP leaderboard
         try {
-            const members = await message.guild.members.fetch();
+            const members = message.guild.members.cache;
             const weekStart = getCurrentWeekStart();
             const res = await db.query('SELECT user_id, xp FROM user_xp_weekly WHERE week_start = $1 ORDER BY xp DESC LIMIT 10', [weekStart]);
             if (!res.rows.length) {
@@ -904,11 +904,11 @@ client.on('messageCreate', async (message) => {
                 message.channel.send('No weekly XP data found.');
                 return;
             }
-            const leaderboard = await Promise.all(res.rows.map(async (row, i) => {
+            const leaderboard = res.rows.map((row, i) => {
                 let member = members.get(row.user_id);
                 let name = member ? member.displayName : `<@${row.user_id}>`;
                 return `#${i+1} - ${name}: **${row.xp} XP**`;
-            }));
+            });
             const embed = {
                 color: 0x2ecc71,
                 title: 'Weekly XP Leaderboard',
@@ -924,17 +924,17 @@ client.on('messageCreate', async (message) => {
     }
     if (command === 'repleaderboard') {
         try {
-            const members = await message.guild.members.fetch();
+            const members = message.guild.members.cache;
             const res = await db.query('SELECT user_id, rep FROM user_rep ORDER BY rep DESC LIMIT 10');
             if (!res.rows.length) {
                 message.channel.send('No reputation data found.');
                 return;
             }
-            const leaderboard = await Promise.all(res.rows.map(async (row, i) => {
+            const leaderboard = res.rows.map((row, i) => {
                 let member = members.get(row.user_id);
                 let name = member ? member.displayName : `<@${row.user_id}>`;
                 return `#${i+1} - ${name}: **${row.rep}**`;
-            }));
+            });
             const embed = {
                 color: 0xf1c40f,
                 title: 'Rep Leaderboard',
