@@ -629,11 +629,13 @@ const client = new Client({
             return;
         }
         if (commandName === 'addrep') {
-            // Usage: !addrep @user [amount]
-            if (!interaction.mentions.users.size) return interaction.reply('Usage: !addrep @user [amount] (amount can be 1, 2, -1, -2)');
-            const user = interaction.mentions.users.first();
+            // Slash command: /addrep user:USER amount:NUMBER
+            const user = interaction.options?.getUser ? interaction.options.getUser('user') : null;
             let amount = 1;
-            if (args.length && /^[-+]?\d+$/.test(args[0])) {
+            if (!user) return interaction.reply('You must specify a user to give rep to!');
+            if (interaction.options?.getInteger && interaction.options.getInteger('amount') !== null) {
+                amount = interaction.options.getInteger('amount');
+            } else if (args.length && /^[-+]?\d+$/.test(args[0])) {
                 amount = parseInt(args.shift(), 10);
             }
             const validAmounts = [1, -1, 2, -2];
@@ -663,7 +665,6 @@ const client = new Client({
             try {
                 await db.query(`INSERT INTO user_rep (user_id, rep) VALUES ($1, $2)
                     ON CONFLICT (user_id) DO UPDATE SET rep = user_rep.rep + $2`, [user.id, amount]);
-                // Log each rep action separately (e.g. +2 counts as 2 actions)
                 for (let i = 0; i < Math.abs(amount); i++) {
                     await db.query('INSERT INTO rep_give_log (giver_id, time) VALUES ($1, $2)', [interaction.user.id, now]);
                 }
@@ -684,11 +685,13 @@ const client = new Client({
         }
 
         if (commandName === 'negrep') {
-            // Usage: !negrep @user [amount]
-            if (!interaction.mentions.users.size) return interaction.reply('Usage: !negrep @user [amount] (amount can be -1 or -2)');
-            const user = interaction.mentions.users.first();
+            // Slash command: /negrep user:USER amount:NUMBER
+            const user = interaction.options?.getUser ? interaction.options.getUser('user') : null;
             let amount = -1;
-            if (args.length && /^-\d+$/.test(args[0])) {
+            if (!user) return interaction.reply('You must specify a user to give neg rep to!');
+            if (interaction.options?.getInteger && interaction.options.getInteger('amount') !== null) {
+                amount = interaction.options.getInteger('amount');
+            } else if (args.length && /^-\d+$/.test(args[0])) {
                 amount = parseInt(args.shift(), 10);
             }
             const validAmounts = [-1, -2];
