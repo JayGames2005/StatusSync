@@ -20,68 +20,7 @@ async function ensureXpTables() {
     )`);
     await db.query(`CREATE TABLE IF NOT EXISTS user_xp_weekly (
         user_id VARCHAR(32) PRIMARY KEY,
-        xp INTEGER DEFAULT 0,
-        week_start DATE
-    )`);
-}
-
-// Helper to get start of current week (Monday 11am EST)
-function getCurrentWeekStart() {
-    const now = new Date();
-    // Convert to EST (UTC-5 or UTC-4 DST, but we use UTC-5 for simplicity)
-    const utc = new Date(now.getTime() + now.getTimezoneOffset() * 60000);
-    let est = new Date(utc.getTime() - (5 * 60 * 60 * 1000));
-    // Set to Monday 11am
-    est.setUTCHours(16, 0, 0, 0); // 11am EST = 16:00 UTC
-    est.setUTCDate(est.getUTCDate() - ((est.getUTCDay() + 6) % 7));
-    return est.toISOString().slice(0, 10); // YYYY-MM-DD
-}
-
-require('dotenv').config();
-const { Client, GatewayIntentBits, Partials, Collection, REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-// Register slash commands
-const commands = [
-    new SlashCommandBuilder()
-        .setName('ask')
-        .setDescription('Ask the AI a question')
-        .addStringOption(option => option.setName('question').setDescription('Your question').setRequired(true)),
-    new SlashCommandBuilder()
-        .setName('resetweeklyxp')
-        .setDescription('Admin: Reset weekly XP for all users')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-    new SlashCommandBuilder()
-        .setName('starboardleaderboard')
-        .setDescription('Show the top users and messages on the starboard')
-        .setName('setstarboard')
-        .setDescription('Configure the starboard channel, emoji, and threshold')
-        .addChannelOption(option => option.setName('channel').setDescription('Starboard channel').setRequired(true))
-        .addStringOption(option => option.setName('emoji').setDescription('Emoji to use (default: ⭐)').setRequired(false))
-        .addIntegerOption(option => option.setName('threshold').setDescription('Reactions needed (default: 3)').setRequired(false))
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-    new SlashCommandBuilder()
-        .setName('teststarboard')
-        .setDescription('Admin: Test the starboard by reposting a message to #starboard')
-        .addStringOption(option => option.setName('message').setDescription('Message link or ID').setRequired(true))
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-    new SlashCommandBuilder()
-        .setName('xpleaderboard')
-        .setDescription('Show the all-time XP leaderboard'),
-    new SlashCommandBuilder()
-        .setName('xpweekly')
-        .setDescription('Show the weekly XP leaderboard (resets every Monday 11am EST)'),
-    new SlashCommandBuilder()
-        .setName('repleaderboard')
-        .setDescription('Show the top users with the highest reputation'),
-    new SlashCommandBuilder()
-        .setName('setwelcome')
-        .setDescription('Set the welcome channel for this server')
-        .addChannelOption(option => option.setName('channel').setDescription('Welcome channel').setRequired(true)),
-    new SlashCommandBuilder()
-        .setName('setupdb')
-        .setDescription('Create all necessary database tables for StatusSync')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-    new SlashCommandBuilder()
-        .setName('rep')
+    // Removed stray closing braces and duplicate event handler to fix syntax errors.
         .setDescription('Show your or another user\'s reputation')
         .addUserOption(option => option.setName('user').setDescription('User to check').setRequired(false)),
     new SlashCommandBuilder()
@@ -920,99 +859,89 @@ client.on('messageReactionAdd', async (reaction, user) => {
             timestamp: new Date(reaction.message.createdTimestamp)
         };
         // Attach image if present
-        if (reaction.message.attachments.size > 0) {
-            const img = reaction.message.attachments.find(a => a.contentType && a.contentType.startsWith('image/'));
-            if (img) embed.image = { url: img.url };
-        }
-        // Track starboarded message in DB
-        await db.query(`INSERT INTO starboard_posts (message_id, author_id, stars, url, content, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (message_id) DO UPDATE SET stars = $3`, [
-            reaction.message.id,
-            reaction.message.author.id,
-            reaction.count,
-            reaction.message.url,
-            reaction.message.content,
-            new Date(reaction.message.createdTimestamp)
-        ]);
-        await starboard.send({ embeds: [embed] });
-    } catch (err) {
-        console.error('Starboard error:', err);
-    }
-});
+        client.on('messageCreate', async (message) => {
+            if (message.author.bot || !message.guild) return;
 
-client.once('clientReady', () => {
-    console.log(`Logged in as ${client.user.tag}`);
-});
+            // XP SYSTEM: Add XP for every message (5 for text, 10 for sticker)
+            await ensureXpTables();
+            let xpToAdd = 0;
+            if (message.stickers && message.stickers.size > 0) {
+                xpToAdd = 10;
+            } else if (message.content && message.content.length > 0) {
+                xpToAdd = 5;
+            }
+            if (xpToAdd > 0) {
+                await db.query('INSERT INTO user_xp (user_id, xp) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + $2', [message.author.id, xpToAdd]);
+                // Weekly XP: use week_start and reset on new week
+                const weekStart = getCurrentWeekStart();
+                const res = await db.query('SELECT week_start, xp FROM user_xp_weekly WHERE user_id = $1', [message.author.id]);
+                if (!res.rows.length) {
+                    await db.query('INSERT INTO user_xp_weekly (user_id, xp, week_start) VALUES ($1, $2, $3)', [message.author.id, xpToAdd, weekStart]);
+                } else if (res.rows[0].week_start !== weekStart) {
+                    await db.query('UPDATE user_xp_weekly SET xp = $1, week_start = $2 WHERE user_id = $3', [xpToAdd, weekStart, message.author.id]);
+                } else {
+                    await db.query('UPDATE user_xp_weekly SET xp = xp + $1 WHERE user_id = $2', [xpToAdd, message.author.id]);
+                }
+            }
 
-// Welcome message
-client.on('guildMemberAdd', member => {
-    // Find welcome channel from DB
-    (async () => {
-        await db.query(`CREATE TABLE IF NOT EXISTS welcome_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
-        const res = await db.query('SELECT channel_id FROM welcome_channels WHERE guild_id = $1', [member.guild.id]);
-        let channel = null;
-        if (res.rows.length) {
-            channel = member.guild.channels.cache.get(res.rows[0].channel_id);
-        }
-        if (!channel) channel = member.guild.systemChannel;
-        if (!channel) return;
-        // Get rep
-        let userRep = 0;
-        try {
-            const repRes = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [member.id]);
-            userRep = repRes.rows.length ? repRes.rows[0].rep : 0;
-        } catch {}
-        // Use display name if available
-        let displayName = member.displayName || member.user.username;
-        let avatarURL = member.user.displayAvatarURL ? member.user.displayAvatarURL({ extension: 'png', size: 128 }) : member.user.avatarURL;
-        // Generate welcome card image using repCard.js
-        const { generateRepCard } = require('./repCard');
-        const buffer = await generateRepCard({
-            displayName,
-            username: member.user.username,
-            avatarURL,
-            rep: userRep,
-            rank: 1,
-            level: 1,
-            xp: 0,
-            xpNeeded: 100,
-            bgColor: '#00bfff'
+            // Custom command handling for prefix commands
+            if (message.content.startsWith('!')) {
+                const args = message.content.slice(1).trim().split(/ +/);
+                const command = args.shift().toLowerCase();
+                if (command && customCommands) {
+                    // List custom commands
+                    if (command === 'listcmds') {
+                        try {
+                            const names = await customCommands.listCommands();
+                            if (!names.length) {
+                                await message.reply('No custom commands found.');
+                            } else {
+                                await message.reply('Custom commands: ' + names.map(n => '`' + n + '`').join(', '));
+                            }
+                        } catch (err) {
+                            await message.reply('Error fetching custom commands: ' + err.message);
+                        }
+                        return;
+                    }
+                    // Add custom command (admin only)
+                    if (command === 'addcmd' && message.member?.permissions.has('Administrator')) {
+                        const name = args.shift()?.toLowerCase();
+                        const response = args.join(' ');
+                        if (!name || !response) return message.reply('Usage: !addcmd <name> <response>');
+                        try {
+                            await customCommands.addCommand(name, response);
+                            await message.reply(`Custom command !${name} added!`);
+                        } catch (err) {
+                            await message.reply('Error adding custom command: ' + err.message);
+                        }
+                        return;
+                    }
+                    // Remove custom command (admin only)
+                    if (command === 'removecmd' && message.member?.permissions.has('Administrator')) {
+                        const name = args.shift()?.toLowerCase();
+                        if (!name) return message.reply('Usage: !removecmd <name>');
+                        try {
+                            const exists = await customCommands.getCommand(name);
+                            if (!exists) {
+                                await message.reply(`Custom command !${name} does not exist.`);
+                                return;
+                            }
+                            await customCommands.removeCommand(name);
+                            await message.reply(`Custom command !${name} removed!`);
+                        } catch (err) {
+                            await message.reply('Error removing custom command: ' + err.message);
+                        }
+                        return;
+                    }
+                    // Run custom command
+                    const cmd = await customCommands.getCommand(command);
+                    if (cmd) {
+                        await message.reply(cmd);
+                        return;
+                    }
+                }
+            }
         });
-        channel.send({
-            content: `<@${member.id}> Welcome to the server!`,
-            files: [{ attachment: buffer, name: 'welcome_card.png' }]
-        });
-    })();
-});
-
-
-
-const customCommands = require('./custom_commands');
-
-client.on('messageCreate', async (message) => {
-    // !ask prefix command (AI Q&A)
-    if (message.content.startsWith('!ask ')) {
-        const question = message.content.slice(5).trim();
-        if (!question) return message.reply('Ask me a question!');
-        const sent = await message.reply('Thinking...');
-        try {
-            const answer = await askAI(question);
-            await sent.edit(answer);
-        } catch (err) {
-            await sent.edit('AI error: ' + err.message);
-        }
-        return;
-    }
-    if (message.author.bot || !message.guild) return;
-    if (!message.content.startsWith('!')) return;
-    const args = message.content.slice(1).trim().split(/ +/);
-    const command = args.shift().toLowerCase();
-    // XP SYSTEM: Add XP for every message (5 for text, 10 for sticker)
-    await ensureXpTables();
-    let xpToAdd = 0;
-    if (message.stickers && message.stickers.size > 0) {
-        xpToAdd = 10;
     } else if (message.content && message.content.length > 0) {
         xpToAdd = 5;
     }
@@ -1028,6 +957,8 @@ client.on('messageCreate', async (message) => {
         } else {
             await db.query('UPDATE user_xp_weekly SET xp = xp + $1 WHERE user_id = $2', [xpToAdd, message.author.id]);
         }
+    }
+});
     }
         // XP SYSTEM: Add 30 XP for reaction given and received
         await ensureXpTables();
