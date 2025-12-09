@@ -1065,8 +1065,60 @@ const client = new Client({
             const channelId = res.rows[0].channel_id;
             const channel = member.guild.channels.cache.get(channelId);
             if (!channel || !channel.isTextBased || !channel.isTextBased()) return;
-            // Send welcome message
-            await channel.send(`Welcome to the server, <@${member.id}>! 🎉`);
+
+            // Gather rep card info for the new member
+            let displayName = member.displayName || member.user.username;
+            let avatarURL = member.user.displayAvatarURL ? member.user.displayAvatarURL({ extension: 'png', size: 128 }) : member.user.avatarURL;
+            // Fetch rep
+            const repRes = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [member.id]);
+            const userRep = repRes.rows.length ? repRes.rows[0].rep : 0;
+            // Fetch XP and level
+            const xpRes = await db.query('SELECT xp FROM user_xp WHERE user_id = $1', [member.id]);
+            const xp = xpRes.rows.length ? xpRes.rows[0].xp : 0;
+            const level = Math.floor(0.1 * Math.sqrt(xp));
+            const xpNeeded = Math.floor(Math.pow((level + 1) / 0.1, 2)) - Math.floor(Math.pow(level / 0.1, 2));
+            const xpCurrent = xp - Math.floor(Math.pow(level / 0.1, 2));
+            // Fetch rank (by rep)
+            const rankRes = await db.query('SELECT user_id FROM user_rep ORDER BY rep DESC');
+            let rank = 1;
+            if (rankRes.rows.length) {
+                rank = rankRes.rows.findIndex(row => row.user_id === member.id) + 1;
+                if (rank < 1) rank = 1;
+            }
+            // Fetch background color
+            let bgColor = '#23272A';
+            const bgRes = await db.query('SELECT background_color FROM user_rep_settings WHERE user_id = $1', [member.id]);
+            const colorMap = {
+                blue: '#3498db',
+                red: '#e74c3c',
+                black: '#23272A',
+                white: '#ecf0f1',
+                green: '#2ecc71',
+                purple: '#9b59b6',
+                orange: '#e67e22'
+            };
+            if (bgRes.rows.length && bgRes.rows[0].background_color && colorMap[bgRes.rows[0].background_color]) {
+                bgColor = colorMap[bgRes.rows[0].background_color];
+            }
+            // Generate rep card image
+            const { generateRepCard } = require('./repCard');
+            const buffer = await generateRepCard({
+                displayName,
+                username: member.user.username,
+                avatarURL,
+                rep: userRep,
+                rank,
+                level,
+                xp: xpCurrent,
+                xpNeeded,
+                bgColor
+            });
+
+            // Send welcome message with rep card
+            await channel.send({
+                content: `Welcome to the server, <@${member.id}>! 🎉 Here is your rep card:`,
+                files: [{ attachment: buffer, name: 'rep_card.png' }]
+            });
         } catch (err) {
             console.error('Error sending welcome message:', err);
         }
