@@ -847,7 +847,33 @@ const client = new Client({
                         time TIMESTAMP
                     );
                 `);
-                interaction.channel.send('Database tables (user_rep, custom_commands, rep_give_log) created or already exist!');
+                // Moderation tables
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS mod_cases (
+                        case_id SERIAL PRIMARY KEY,
+                        user_id VARCHAR(32) NOT NULL,
+                        moderator_id VARCHAR(32) NOT NULL,
+                        action VARCHAR(16) NOT NULL, -- warn, timeout, kick, ban, unban
+                        reason TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        expires_at TIMESTAMP,
+                        status VARCHAR(16) DEFAULT 'open', -- open, closed
+                        guild_id VARCHAR(32) NOT NULL
+                    );
+                `);
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS mod_logs (
+                        log_id SERIAL PRIMARY KEY,
+                        case_id INTEGER REFERENCES mod_cases(case_id),
+                        user_id VARCHAR(32) NOT NULL,
+                        moderator_id VARCHAR(32) NOT NULL,
+                        action VARCHAR(16) NOT NULL,
+                        reason TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        guild_id VARCHAR(32) NOT NULL
+                    );
+                `);
+                interaction.channel.send('Database tables (user_rep, custom_commands, rep_give_log, mod_cases, mod_logs) created or already exist!');
             } catch (err) {
                 console.error(err);
                 interaction.channel.send('Error creating tables: ' + err.message);

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StatusSync Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>StatusSync Dashboard</h1>
+    </header>
+    <main>
+        <section id="modlogs">
+            <h2>Mod Logs</h2>
+            <div id="modlogs-list"></div>
+        </section>
+        <section id="cases">
+            <h2>Cases</h2>
+            <div id="cases-list"></div>
+        </section>
+        <section id="userhistory">
+            <h2>User History</h2>
+            <input type="text" id="user-id-input" placeholder="User ID">
+            <button onclick="fetchUserHistory()">Fetch</button>
+            <div id="userhistory-list"></div>
+        </section>
+        <section id="settings">
+            <h2>Server Settings</h2>
+            <div id="settings-info"></div>
+        </section>
+        <section id="stats">
+            <h2>Statistics</h2>
+            <div id="stats-info"></div>
+        </section>
+        <section id="widgets">
+            <h2>Widgets</h2>
+            <div id="widgets-list"></div>
+        </section>
+    </main>
+    <script src="frontend.js"></script>
+</body>
+</html>
