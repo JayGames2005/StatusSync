@@ -1055,4 +1055,21 @@ const client = new Client({
             }
         }
     });
+    // Welcome new members
+    client.on('guildMemberAdd', async (member) => {
+        try {
+            // Fetch welcome channel from DB
+            await db.query(`CREATE TABLE IF NOT EXISTS welcome_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+            const res = await db.query('SELECT channel_id FROM welcome_channels WHERE guild_id = $1', [member.guild.id]);
+            if (!res.rows.length) return;
+            const channelId = res.rows[0].channel_id;
+            const channel = member.guild.channels.cache.get(channelId);
+            if (!channel || !channel.isTextBased || !channel.isTextBased()) return;
+            // Send welcome message
+            await channel.send(`Welcome to the server, <@${member.id}>! 🎉`);
+        } catch (err) {
+            console.error('Error sending welcome message:', err);
+        }
+    });
+
     client.login(process.env.BOT_TOKEN);
