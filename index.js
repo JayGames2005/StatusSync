@@ -123,47 +123,6 @@ const commands = [
                     { name: 'Orange', value: 'orange' }
                 )
         ),
-        new SlashCommandBuilder()
-            .setName('setmodlog')
-            .setDescription('Set the mod log channel for moderation logs')
-            .addChannelOption(option => option.setName('channel').setDescription('Mod log channel').setRequired(true))
-            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-        new SlashCommandBuilder()
-            .setName('warn')
-            .setDescription('Warn a user')
-            .addUserOption(option => option.setName('user').setDescription('User to warn').setRequired(true))
-            .addStringOption(option => option.setName('reason').setDescription('Reason for warning').setRequired(false))
-            .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
-        new SlashCommandBuilder()
-            .setName('timeout')
-            .setDescription('Timeout a user for a set duration (minutes)')
-            .addUserOption(option => option.setName('user').setDescription('User to timeout').setRequired(true))
-            .addIntegerOption(option => option.setName('duration').setDescription('Duration in minutes').setRequired(true))
-            .addStringOption(option => option.setName('reason').setDescription('Reason for timeout').setRequired(false))
-            .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
-        new SlashCommandBuilder()
-            .setName('kick')
-            .setDescription('Kick a user from the server')
-            .addUserOption(option => option.setName('user').setDescription('User to kick').setRequired(true))
-            .addStringOption(option => option.setName('reason').setDescription('Reason for kick').setRequired(false))
-            .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
-        new SlashCommandBuilder()
-            .setName('ban')
-            .setDescription('Ban a user from the server')
-            .addUserOption(option => option.setName('user').setDescription('User to ban').setRequired(true))
-            .addStringOption(option => option.setName('reason').setDescription('Reason for ban').setRequired(false))
-            .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
-        new SlashCommandBuilder()
-            .setName('unban')
-            .setDescription('Unban a user by user ID')
-            .addStringOption(option => option.setName('userid').setDescription('User ID to unban').setRequired(true))
-            .addStringOption(option => option.setName('reason').setDescription('Reason for unban').setRequired(false))
-            .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
-        new SlashCommandBuilder()
-            .setName('closecase')
-            .setDescription('Close a moderation case by case ID')
-            .addIntegerOption(option => option.setName('caseid').setDescription('Case ID to close').setRequired(true))
-            .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
 ];
 
 async function registerSlashCommands() {
