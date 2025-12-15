@@ -240,6 +240,28 @@ const client = new Client({
     partials: [Partials.Channel, Partials.Message]
 });
 
+// Health check HTTP server for Railway
+const http = require('http');
+const PORT = process.env.PORT || 3000;
+const server = http.createServer((req, res) => {
+    if (req.url === '/' || req.url === '/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+            status: 'ok', 
+            uptime: process.uptime(),
+            botReady: client.isReady(),
+            timestamp: new Date().toISOString()
+        }));
+    } else {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not Found');
+    }
+});
+
+server.listen(PORT, () => {
+    console.log(`Health check server listening on port ${PORT}`);
+});
+
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
                         // /resetweeklyxp command (admin only)
