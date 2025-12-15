@@ -486,6 +486,12 @@ async function loadPremium() {
         }
     } catch (err) {
         console.error('Error loading premium:', err);
+        document.getElementById('premium-tier').innerHTML = `
+            <div style="background: #ed4245; padding: 1rem; border-radius: 8px; color: white;">
+                <p style="margin: 0;">❌ Error loading premium status: ${err.message}</p>
+                <p style="margin: 0.5rem 0 0 0; font-size: 0.9rem;">Make sure you have selected a server and are logged in.</p>
+            </div>
+        `;
     }
 }
 
