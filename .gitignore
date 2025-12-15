@@ -1,4 +1,27 @@
-# Ignore environment files and secrets
+# Dependencies
+node_modules/
+
+# Environment files and secrets
 .env
 rep.json
 custom_commands.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Database
+*.db
+*.sqlite
+
+# Temporary files
+*.tmp
+temp/
