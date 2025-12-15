@@ -237,7 +237,7 @@ const client = new Client({
         GatewayIntentBits.GuildModeration,
         GatewayIntentBits.AutoModerationExecution
     ],
-    partials: [Partials.Channel]
+    partials: [Partials.Channel, Partials.Message]
 });
 
     // Handle slash commands
@@ -1351,6 +1351,51 @@ const client = new Client({
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
+        // === MESSAGE LOGGING ===
+        try {
+            await db.query(`CREATE TABLE IF NOT EXISTS logging_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+            const logRes = await db.query('SELECT channel_id FROM logging_channels WHERE guild_id = $1', [message.guild.id]);
+            if (logRes.rows.length) {
+                const logChannel = message.guild.channels.cache.get(logRes.rows[0].channel_id);
+                if (logChannel && logChannel.isTextBased() && logChannel.id !== message.channel.id) {
+                    const embed = {
+                        color: 0x3498db,
+                        author: {
+                            name: `${message.author.tag}`,
+                            icon_url: message.author.displayAvatarURL()
+                        },
+                        title: '📝 Message Sent',
+                        description: message.content ? (message.content.length > 1024 ? message.content.substring(0, 1021) + '...' : message.content) : '*[No text content]*',
+                        fields: [
+                            { name: 'Channel', value: `<#${message.channel.id}>`, inline: true },
+                            { name: 'User', value: `<@${message.author.id}>`, inline: true },
+                            { name: 'Message ID', value: message.id, inline: false }
+                        ],
+                        timestamp: new Date(),
+                        footer: { text: `User ID: ${message.author.id}` }
+                    };
+
+                    if (message.attachments.size > 0) {
+                        const attachments = message.attachments.map(a => `[${a.name}](${a.url})`).join('\n');
+                        embed.fields.push({ name: 'Attachments', value: attachments.length > 1024 ? attachments.substring(0, 1021) + '...' : attachments, inline: false });
+                        const firstImage = message.attachments.find(a => a.contentType?.startsWith('image/'));
+                        if (firstImage) {
+                            embed.image = { url: firstImage.url };
+                        }
+                    }
+
+                    if (message.stickers.size > 0) {
+                        const stickers = message.stickers.map(s => s.name).join(', ');
+                        embed.fields.push({ name: 'Stickers', value: stickers, inline: false });
+                    }
+
+                    await logChannel.send({ embeds: [embed] });
+                }
+            }
+        } catch (err) {
+            console.error('Error logging message creation:', err);
+        }
+
         // XP SYSTEM: Add XP for every message (5 for text, 10 for sticker)
         await ensureXpTables();
         let xpToAdd = 0;
@@ -1547,6 +1592,125 @@ const client = new Client({
             }
         }
     });
+
+    // === MESSAGE UPDATE/DELETE LOGGING ===
+    // Log message updates/edits
+    client.on('messageUpdate', async (oldMessage, newMessage) => {
+        if (newMessage.author?.bot) return;
+        if (!newMessage.guild) return;
+        if (oldMessage.content === newMessage.content) return; // Ignore embed updates
+
+        try {
+            await db.query(`CREATE TABLE IF NOT EXISTS logging_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+            const logRes = await db.query('SELECT channel_id FROM logging_channels WHERE guild_id = $1', [newMessage.guild.id]);
+            if (logRes.rows.length) {
+                const logChannel = newMessage.guild.channels.cache.get(logRes.rows[0].channel_id);
+                if (logChannel && logChannel.isTextBased()) {
+                    const embed = {
+                        color: 0xffa500,
+                        author: {
+                            name: `${newMessage.author.tag}`,
+                            icon_url: newMessage.author.displayAvatarURL()
+                        },
+                        title: '✏️ Message Edited',
+                        fields: [
+                            { name: 'Channel', value: `<#${newMessage.channel.id}>`, inline: true },
+                            { name: 'User', value: `<@${newMessage.author.id}>`, inline: true },
+                            { name: 'Before', value: oldMessage.content || '*[No text content]*', inline: false },
+                            { name: 'After', value: newMessage.content || '*[No text content]*', inline: false },
+                            { name: 'Jump to Message', value: `[Click here](${newMessage.url})`, inline: false }
+                        ],
+                        timestamp: new Date(),
+                        footer: { text: `Message ID: ${newMessage.id}` }
+                    };
+
+                    await logChannel.send({ embeds: [embed] });
+                }
+            }
+        } catch (err) {
+            console.error('Error logging message edit:', err);
+        }
+    });
+
+    // Log message deletions
+    client.on('messageDelete', async (message) => {
+        if (message.author?.bot) return;
+        if (!message.guild) return;
+
+        try {
+            await db.query(`CREATE TABLE IF NOT EXISTS logging_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+            const logRes = await db.query('SELECT channel_id FROM logging_channels WHERE guild_id = $1', [message.guild.id]);
+            if (logRes.rows.length) {
+                const logChannel = message.guild.channels.cache.get(logRes.rows[0].channel_id);
+                if (logChannel && logChannel.isTextBased()) {
+                    const embed = {
+                        color: 0xff0000,
+                        author: {
+                            name: message.author ? `${message.author.tag}` : 'Unknown User',
+                            icon_url: message.author ? message.author.displayAvatarURL() : null
+                        },
+                        title: '🗑️ Message Deleted',
+                        description: message.content || '*[No text content]*',
+                        fields: [
+                            { name: 'Channel', value: `<#${message.channel.id}>`, inline: true },
+                            { name: 'User', value: message.author ? `<@${message.author.id}>` : 'Unknown', inline: true },
+                            { name: 'Message ID', value: message.id, inline: false }
+                        ],
+                        timestamp: new Date(),
+                        footer: { text: message.author ? `User ID: ${message.author.id}` : 'Message ID: ' + message.id }
+                    };
+
+                    if (message.attachments.size > 0) {
+                        const attachments = message.attachments.map(a => `${a.name} (${a.url})`).join('\n');
+                        embed.fields.push({ name: 'Attachments', value: attachments, inline: false });
+                        const firstImage = message.attachments.find(a => a.contentType?.startsWith('image/'));
+                        if (firstImage) {
+                            embed.image = { url: firstImage.url };
+                        }
+                    }
+
+                    if (message.stickers?.size > 0) {
+                        const stickers = message.stickers.map(s => s.name).join(', ');
+                        embed.fields.push({ name: 'Stickers', value: stickers, inline: false });
+                    }
+
+                    await logChannel.send({ embeds: [embed] });
+                }
+            }
+        } catch (err) {
+            console.error('Error logging message deletion:', err);
+        }
+    });
+
+    // Log bulk message deletions
+    client.on('messageDeleteBulk', async (messages) => {
+        const firstMessage = messages.first();
+        if (!firstMessage?.guild) return;
+
+        try {
+            await db.query(`CREATE TABLE IF NOT EXISTS logging_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+            const logRes = await db.query('SELECT channel_id FROM logging_channels WHERE guild_id = $1', [firstMessage.guild.id]);
+            if (logRes.rows.length) {
+                const logChannel = firstMessage.guild.channels.cache.get(logRes.rows[0].channel_id);
+                if (logChannel && logChannel.isTextBased()) {
+                    const embed = {
+                        color: 0xff0000,
+                        title: '🗑️ Bulk Messages Deleted',
+                        fields: [
+                            { name: 'Channel', value: `<#${firstMessage.channel.id}>`, inline: true },
+                            { name: 'Count', value: `${messages.size} messages`, inline: true }
+                        ],
+                        timestamp: new Date()
+                    };
+
+                    await logChannel.send({ embeds: [embed] });
+                }
+            }
+        } catch (err) {
+            console.error('Error logging bulk message deletion:', err);
+        }
+    });
+
     // Welcome new members
     client.on('guildMemberAdd', async (member) => {
         try {
