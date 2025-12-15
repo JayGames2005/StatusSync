@@ -413,7 +413,14 @@ async function fetchCommands() {
 async function loadPremium() {
     try {
         const guildId = document.getElementById('server-select').value;
-        if (!guildId) return;
+        if (!guildId) {
+            document.getElementById('premium-tier').innerHTML = `
+                <div style="background: #2c2f33; padding: 1rem; border-radius: 8px;">
+                    <p style="margin: 0; color: #faa61a;">⚠️ Please select a server first</p>
+                </div>
+            `;
+            return;
+        }
         
         // Load current status
         const status = await apiRequest(`/dashboard/premium/status?guild_id=${guildId}`);
