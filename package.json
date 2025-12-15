@@ -3,14 +3,17 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node index.js",
-    "dashboard": "node dashboard/server.js"
+    "dashboard": "node dashboard/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "engines": {
+    "node": ">=18.x"
+  },
+  "keywords": ["discord", "bot", "moderation", "dashboard"],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Discord bot with moderation, XP system, reputation, and web dashboard",
   "dependencies": {
     "canvas": "^3.2.0",
     "discord.js": "^14.25.1",

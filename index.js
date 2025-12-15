@@ -2012,3 +2012,9 @@ const client = new Client({
     // Note: guildMemberRemove for leaves and kicks is already handled above with logging channel
 
     client.login(process.env.BOT_TOKEN);
+
+    // Optional: Start dashboard if ENABLE_DASHBOARD=true
+    if (process.env.ENABLE_DASHBOARD === 'true') {
+        console.log('Starting dashboard server...');
+        require('./dashboard/server');
+    }
