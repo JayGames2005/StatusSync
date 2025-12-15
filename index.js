@@ -123,6 +123,54 @@ const commands = [
                     { name: 'Orange', value: 'orange' }
                 )
         ),
+    // Moderation commands
+    new SlashCommandBuilder()
+        .setName('warn')
+        .setDescription('Warn a user')
+        .addUserOption(option => option.setName('user').setDescription('User to warn').setRequired(true))
+        .addStringOption(option => option.setName('reason').setDescription('Reason for warning').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+    new SlashCommandBuilder()
+        .setName('timeout')
+        .setDescription('Timeout a user')
+        .addUserOption(option => option.setName('user').setDescription('User to timeout').setRequired(true))
+        .addIntegerOption(option => option.setName('duration').setDescription('Duration in minutes').setRequired(true))
+        .addStringOption(option => option.setName('reason').setDescription('Reason for timeout').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+    new SlashCommandBuilder()
+        .setName('kick')
+        .setDescription('Kick a user from the server')
+        .addUserOption(option => option.setName('user').setDescription('User to kick').setRequired(true))
+        .addStringOption(option => option.setName('reason').setDescription('Reason for kick').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
+    new SlashCommandBuilder()
+        .setName('ban')
+        .setDescription('Ban a user from the server')
+        .addUserOption(option => option.setName('user').setDescription('User to ban').setRequired(true))
+        .addStringOption(option => option.setName('reason').setDescription('Reason for ban').setRequired(false))
+        .addIntegerOption(option => option.setName('delete_messages').setDescription('Delete messages from last X days (0-7)').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
+    new SlashCommandBuilder()
+        .setName('unban')
+        .setDescription('Unban a user from the server')
+        .addStringOption(option => option.setName('user_id').setDescription('User ID to unban').setRequired(true))
+        .addStringOption(option => option.setName('reason').setDescription('Reason for unban').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
+    new SlashCommandBuilder()
+        .setName('case')
+        .setDescription('View a moderation case')
+        .addIntegerOption(option => option.setName('case_id').setDescription('Case ID to view').setRequired(true))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+    new SlashCommandBuilder()
+        .setName('cases')
+        .setDescription('View all moderation cases for a user')
+        .addUserOption(option => option.setName('user').setDescription('User to view cases for').setRequired(true))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+    new SlashCommandBuilder()
+        .setName('setmodlog')
+        .setDescription('Set the moderation log channel')
+        .addChannelOption(option => option.setName('channel').setDescription('Moderation log channel').setRequired(true))
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 ];
 
 async function registerSlashCommands() {
@@ -180,7 +228,9 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildModeration,
+        GatewayIntentBits.AutoModerationExecution
     ],
     partials: [Partials.Channel]
 });
@@ -587,6 +637,395 @@ const client = new Client({
             await interaction.reply({ content: `Your rep card background color has been set to ${color}!`, flags: 64 });
             return;
         }
+
+        // === MODERATION COMMANDS ===
+        
+        // Helper function to log moderation actions to database and channel
+        async function logModAction(guildId, userId, moderatorId, action, reason, expiresAt = null) {
+            // Insert into mod_cases
+            const caseRes = await db.query(
+                `INSERT INTO mod_cases (user_id, moderator_id, action, reason, created_at, expires_at, guild_id)
+                 VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, $6) RETURNING case_id`,
+                [userId, moderatorId, action, reason || 'No reason provided', expiresAt, guildId]
+            );
+            const caseId = caseRes.rows[0].case_id;
+            
+            // Insert into mod_logs
+            await db.query(
+                `INSERT INTO mod_logs (case_id, user_id, moderator_id, action, reason, guild_id)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [caseId, userId, moderatorId, action, reason || 'No reason provided', guildId]
+            );
+            
+            return caseId;
+        }
+
+        async function sendModLog(guild, caseId, user, moderator, action, reason, duration = null) {
+            try {
+                await db.query(`CREATE TABLE IF NOT EXISTS mod_log_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+                const res = await db.query('SELECT channel_id FROM mod_log_channels WHERE guild_id = $1', [guild.id]);
+                if (!res.rows.length) return;
+                
+                const channel = guild.channels.cache.get(res.rows[0].channel_id);
+                if (!channel || !channel.isTextBased()) return;
+                
+                const embed = {
+                    color: action === 'warn' ? 0xffa500 : action === 'timeout' ? 0xff6b6b : action === 'kick' ? 0xff4757 : action === 'ban' ? 0xff0000 : 0x00ff00,
+                    title: `Case #${caseId} | ${action.toUpperCase()}`,
+                    fields: [
+                        { name: 'User', value: `<@${user.id}> (${user.tag})`, inline: true },
+                        { name: 'Moderator', value: `<@${moderator.id}>`, inline: true },
+                        { name: 'Reason', value: reason || 'No reason provided', inline: false }
+                    ],
+                    timestamp: new Date(),
+                    footer: { text: `User ID: ${user.id}` }
+                };
+                
+                if (duration) {
+                    embed.fields.push({ name: 'Duration', value: duration, inline: true });
+                }
+                
+                await channel.send({ embeds: [embed] });
+            } catch (err) {
+                console.error('Error sending mod log:', err);
+            }
+        }
+
+        if (commandName === 'warn') {
+            const user = interaction.options.getUser('user');
+            const reason = interaction.options.getString('reason') || 'No reason provided';
+            
+            if (!user) {
+                await interaction.reply({ content: 'User not found.', flags: 64 });
+                return;
+            }
+            
+            if (user.id === interaction.user.id) {
+                await interaction.reply({ content: 'You cannot warn yourself!', flags: 64 });
+                return;
+            }
+            
+            if (user.bot) {
+                await interaction.reply({ content: 'You cannot warn bots!', flags: 64 });
+                return;
+            }
+            
+            try {
+                const caseId = await logModAction(interaction.guild.id, user.id, interaction.user.id, 'warn', reason);
+                await sendModLog(interaction.guild, caseId, user, interaction.user, 'warn', reason);
+                
+                // Try to DM the user
+                try {
+                    await user.send(`You have been warned in **${interaction.guild.name}** for: ${reason}`);
+                } catch (err) {
+                    console.log('Could not DM user:', err.message);
+                }
+                
+                await interaction.reply({ content: `⚠️ **${user.tag}** has been warned. (Case #${caseId})`, flags: 64 });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error warning user: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'timeout') {
+            const user = interaction.options.getUser('user');
+            const duration = interaction.options.getInteger('duration');
+            const reason = interaction.options.getString('reason') || 'No reason provided';
+            
+            if (!user) {
+                await interaction.reply({ content: 'User not found.', flags: 64 });
+                return;
+            }
+            
+            if (duration < 1 || duration > 40320) { // Max 28 days (40320 minutes)
+                await interaction.reply({ content: 'Duration must be between 1 minute and 40320 minutes (28 days).', flags: 64 });
+                return;
+            }
+            
+            if (user.id === interaction.user.id) {
+                await interaction.reply({ content: 'You cannot timeout yourself!', flags: 64 });
+                return;
+            }
+            
+            if (user.bot) {
+                await interaction.reply({ content: 'You cannot timeout bots!', flags: 64 });
+                return;
+            }
+            
+            try {
+                const member = await interaction.guild.members.fetch(user.id);
+                if (!member) {
+                    await interaction.reply({ content: 'Member not found in this server.', flags: 64 });
+                    return;
+                }
+                
+                // Check role hierarchy
+                if (member.roles.highest.position >= interaction.member.roles.highest.position) {
+                    await interaction.reply({ content: 'You cannot timeout this user due to role hierarchy.', flags: 64 });
+                    return;
+                }
+                
+                const expiresAt = new Date(Date.now() + duration * 60 * 1000);
+                await member.timeout(duration * 60 * 1000, reason);
+                
+                const caseId = await logModAction(interaction.guild.id, user.id, interaction.user.id, 'timeout', reason, expiresAt);
+                await sendModLog(interaction.guild, caseId, user, interaction.user, 'timeout', reason, `${duration} minutes`);
+                
+                // Try to DM the user
+                try {
+                    await user.send(`You have been timed out in **${interaction.guild.name}** for ${duration} minutes. Reason: ${reason}`);
+                } catch (err) {
+                    console.log('Could not DM user:', err.message);
+                }
+                
+                await interaction.reply({ content: `🔇 **${user.tag}** has been timed out for ${duration} minutes. (Case #${caseId})`, flags: 64 });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error timing out user: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'kick') {
+            const user = interaction.options.getUser('user');
+            const reason = interaction.options.getString('reason') || 'No reason provided';
+            
+            if (!user) {
+                await interaction.reply({ content: 'User not found.', flags: 64 });
+                return;
+            }
+            
+            if (user.id === interaction.user.id) {
+                await interaction.reply({ content: 'You cannot kick yourself!', flags: 64 });
+                return;
+            }
+            
+            if (user.bot) {
+                await interaction.reply({ content: 'You cannot kick bots!', flags: 64 });
+                return;
+            }
+            
+            try {
+                const member = await interaction.guild.members.fetch(user.id);
+                if (!member) {
+                    await interaction.reply({ content: 'Member not found in this server.', flags: 64 });
+                    return;
+                }
+                
+                // Check role hierarchy
+                if (member.roles.highest.position >= interaction.member.roles.highest.position) {
+                    await interaction.reply({ content: 'You cannot kick this user due to role hierarchy.', flags: 64 });
+                    return;
+                }
+                
+                const caseId = await logModAction(interaction.guild.id, user.id, interaction.user.id, 'kick', reason);
+                
+                // Try to DM the user before kicking
+                try {
+                    await user.send(`You have been kicked from **${interaction.guild.name}**. Reason: ${reason}`);
+                } catch (err) {
+                    console.log('Could not DM user:', err.message);
+                }
+                
+                await member.kick(reason);
+                await sendModLog(interaction.guild, caseId, user, interaction.user, 'kick', reason);
+                
+                await interaction.reply({ content: `👢 **${user.tag}** has been kicked. (Case #${caseId})`, flags: 64 });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error kicking user: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'ban') {
+            const user = interaction.options.getUser('user');
+            const reason = interaction.options.getString('reason') || 'No reason provided';
+            const deleteMessages = interaction.options.getInteger('delete_messages') || 0;
+            
+            if (!user) {
+                await interaction.reply({ content: 'User not found.', flags: 64 });
+                return;
+            }
+            
+            if (deleteMessages < 0 || deleteMessages > 7) {
+                await interaction.reply({ content: 'Delete messages days must be between 0 and 7.', flags: 64 });
+                return;
+            }
+            
+            if (user.id === interaction.user.id) {
+                await interaction.reply({ content: 'You cannot ban yourself!', flags: 64 });
+                return;
+            }
+            
+            if (user.bot) {
+                await interaction.reply({ content: 'You cannot ban bots!', flags: 64 });
+                return;
+            }
+            
+            try {
+                const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+                
+                // Check role hierarchy if member exists
+                if (member && member.roles.highest.position >= interaction.member.roles.highest.position) {
+                    await interaction.reply({ content: 'You cannot ban this user due to role hierarchy.', flags: 64 });
+                    return;
+                }
+                
+                const caseId = await logModAction(interaction.guild.id, user.id, interaction.user.id, 'ban', reason);
+                
+                // Try to DM the user before banning
+                try {
+                    await user.send(`You have been banned from **${interaction.guild.name}**. Reason: ${reason}`);
+                } catch (err) {
+                    console.log('Could not DM user:', err.message);
+                }
+                
+                await interaction.guild.members.ban(user, { reason, deleteMessageSeconds: deleteMessages * 24 * 60 * 60 });
+                await sendModLog(interaction.guild, caseId, user, interaction.user, 'ban', reason);
+                
+                await interaction.reply({ content: `🔨 **${user.tag}** has been banned. (Case #${caseId})`, flags: 64 });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error banning user: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'unban') {
+            const userId = interaction.options.getString('user_id');
+            const reason = interaction.options.getString('reason') || 'No reason provided';
+            
+            if (!/^\d{17,}$/.test(userId)) {
+                await interaction.reply({ content: 'Invalid user ID format.', flags: 64 });
+                return;
+            }
+            
+            try {
+                const ban = await interaction.guild.bans.fetch(userId).catch(() => null);
+                if (!ban) {
+                    await interaction.reply({ content: 'This user is not banned.', flags: 64 });
+                    return;
+                }
+                
+                await interaction.guild.members.unban(userId, reason);
+                const caseId = await logModAction(interaction.guild.id, userId, interaction.user.id, 'unban', reason);
+                await sendModLog(interaction.guild, caseId, ban.user, interaction.user, 'unban', reason);
+                
+                await interaction.reply({ content: `✅ **${ban.user.tag}** has been unbanned. (Case #${caseId})`, flags: 64 });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error unbanning user: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'case') {
+            const caseId = interaction.options.getInteger('case_id');
+            
+            try {
+                const res = await db.query(
+                    'SELECT * FROM mod_cases WHERE case_id = $1 AND guild_id = $2',
+                    [caseId, interaction.guild.id]
+                );
+                
+                if (!res.rows.length) {
+                    await interaction.reply({ content: 'Case not found.', flags: 64 });
+                    return;
+                }
+                
+                const modCase = res.rows[0];
+                const user = await client.users.fetch(modCase.user_id).catch(() => ({ tag: 'Unknown User', id: modCase.user_id }));
+                const moderator = await client.users.fetch(modCase.moderator_id).catch(() => ({ tag: 'Unknown Moderator', id: modCase.moderator_id }));
+                
+                const embed = {
+                    color: 0x3498db,
+                    title: `Case #${caseId}`,
+                    fields: [
+                        { name: 'User', value: `<@${user.id}> (${user.tag})`, inline: true },
+                        { name: 'Moderator', value: `<@${moderator.id}>`, inline: true },
+                        { name: 'Action', value: modCase.action, inline: true },
+                        { name: 'Reason', value: modCase.reason || 'No reason provided', inline: false },
+                        { name: 'Created', value: new Date(modCase.created_at).toLocaleString(), inline: true },
+                        { name: 'Status', value: modCase.status, inline: true }
+                    ],
+                    footer: { text: `User ID: ${user.id}` }
+                };
+                
+                if (modCase.expires_at) {
+                    embed.fields.push({ name: 'Expires', value: new Date(modCase.expires_at).toLocaleString(), inline: true });
+                }
+                
+                await interaction.reply({ embeds: [embed], flags: 64 });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error fetching case: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'cases') {
+            const user = interaction.options.getUser('user');
+            
+            if (!user) {
+                await interaction.reply({ content: 'User not found.', flags: 64 });
+                return;
+            }
+            
+            try {
+                const res = await db.query(
+                    'SELECT * FROM mod_cases WHERE user_id = $1 AND guild_id = $2 ORDER BY created_at DESC LIMIT 10',
+                    [user.id, interaction.guild.id]
+                );
+                
+                if (!res.rows.length) {
+                    await interaction.reply({ content: `No cases found for **${user.tag}**.`, flags: 64 });
+                    return;
+                }
+                
+                const cases = res.rows.map(c => 
+                    `**Case #${c.case_id}** - ${c.action} - ${new Date(c.created_at).toLocaleDateString()} - ${c.reason || 'No reason'}`
+                ).join('\n');
+                
+                const embed = {
+                    color: 0x3498db,
+                    title: `Cases for ${user.tag}`,
+                    description: cases,
+                    footer: { text: `User ID: ${user.id} | Showing last 10 cases` }
+                };
+                
+                await interaction.reply({ embeds: [embed], flags: 64 });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error fetching cases: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'setmodlog') {
+            const channel = interaction.options.getChannel('channel');
+            
+            if (!channel.isTextBased()) {
+                await interaction.reply({ content: 'Please select a text channel.', flags: 64 });
+                return;
+            }
+            
+            try {
+                await db.query(`CREATE TABLE IF NOT EXISTS mod_log_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+                await db.query(
+                    'INSERT INTO mod_log_channels (guild_id, channel_id) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2',
+                    [interaction.guild.id, channel.id]
+                );
+                await interaction.reply({ content: `Moderation log channel set to <#${channel.id}>`, flags: 64 });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error setting mod log channel: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
         if (commandName === 'rep') {
             const user = interaction.options.getUser('user') || interaction.user;
             let displayName = user.username;
@@ -1147,6 +1586,178 @@ const client = new Client({
             });
         } catch (err) {
             console.error('Error sending welcome message:', err);
+        }
+    });
+
+    // === AUTOMOD EVENT LOGGING ===
+    // Log AutoMod rule execution (when AutoMod takes action)
+    client.on('autoModerationActionExecution', async (execution) => {
+        try {
+            const { action, ruleTriggerType, user, guild, content, matchedContent } = execution;
+            
+            // Log to mod_logs table
+            await db.query(
+                `INSERT INTO mod_logs (user_id, moderator_id, action, reason, guild_id, created_at)
+                 VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
+                [
+                    user.id,
+                    guild.members.me.id, // Bot as moderator for AutoMod
+                    'automod',
+                    `AutoMod: ${ruleTriggerType} - Matched: ${matchedContent || 'N/A'}`,
+                    guild.id
+                ]
+            );
+            
+            // Send to mod log channel if configured
+            const res = await db.query('SELECT channel_id FROM mod_log_channels WHERE guild_id = $1', [guild.id]);
+            if (res.rows.length) {
+                const channel = guild.channels.cache.get(res.rows[0].channel_id);
+                if (channel && channel.isTextBased()) {
+                    const actionType = action.type === 1 ? 'Block Message' : 
+                                     action.type === 2 ? 'Send Alert' : 
+                                     action.type === 3 ? 'Timeout' : 'Unknown';
+                    
+                    const embed = {
+                        color: 0xff9500,
+                        title: '🤖 AutoMod Action',
+                        fields: [
+                            { name: 'User', value: `<@${user.id}> (${user.tag})`, inline: true },
+                            { name: 'Action Type', value: actionType, inline: true },
+                            { name: 'Rule Type', value: ruleTriggerType, inline: true },
+                            { name: 'Matched Content', value: matchedContent || 'N/A', inline: false },
+                            { name: 'Original Message', value: content ? content.substring(0, 100) : 'N/A', inline: false }
+                        ],
+                        timestamp: new Date(),
+                        footer: { text: `User ID: ${user.id}` }
+                    };
+                    
+                    await channel.send({ embeds: [embed] });
+                }
+            }
+        } catch (err) {
+            console.error('Error logging AutoMod action:', err);
+        }
+    });
+
+    // Log when members are banned (including AutoMod bans)
+    client.on('guildBanAdd', async (ban) => {
+        try {
+            // Fetch audit log to see who banned and why
+            const auditLogs = await ban.guild.fetchAuditLogs({
+                limit: 1,
+                type: 22 // MEMBER_BAN_ADD
+            });
+            
+            const banLog = auditLogs.entries.first();
+            if (banLog && banLog.target.id === ban.user.id) {
+                const moderator = banLog.executor;
+                const reason = banLog.reason || 'No reason provided';
+                
+                // Only log if not already logged by our /ban command (check if it's within last 5 seconds)
+                const recentCase = await db.query(
+                    `SELECT case_id FROM mod_cases WHERE user_id = $1 AND guild_id = $2 AND action = 'ban' 
+                     AND created_at > NOW() - INTERVAL '5 seconds' ORDER BY created_at DESC LIMIT 1`,
+                    [ban.user.id, ban.guild.id]
+                );
+                
+                if (recentCase.rows.length === 0) {
+                    // This is an external ban (not from our bot)
+                    const caseId = await db.query(
+                        `INSERT INTO mod_cases (user_id, moderator_id, action, reason, guild_id)
+                         VALUES ($1, $2, 'ban', $3, $4) RETURNING case_id`,
+                        [ban.user.id, moderator.id, reason, ban.guild.id]
+                    );
+                    
+                    await db.query(
+                        `INSERT INTO mod_logs (case_id, user_id, moderator_id, action, reason, guild_id)
+                         VALUES ($1, $2, $3, 'ban', $4, $5)`,
+                        [caseId.rows[0].case_id, ban.user.id, moderator.id, reason, ban.guild.id]
+                    );
+                    
+                    // Send to mod log
+                    const res = await db.query('SELECT channel_id FROM mod_log_channels WHERE guild_id = $1', [ban.guild.id]);
+                    if (res.rows.length) {
+                        const channel = ban.guild.channels.cache.get(res.rows[0].channel_id);
+                        if (channel && channel.isTextBased()) {
+                            const embed = {
+                                color: 0xff0000,
+                                title: `Case #${caseId.rows[0].case_id} | BAN (External)`,
+                                fields: [
+                                    { name: 'User', value: `<@${ban.user.id}> (${ban.user.tag})`, inline: true },
+                                    { name: 'Moderator', value: `<@${moderator.id}>`, inline: true },
+                                    { name: 'Reason', value: reason, inline: false }
+                                ],
+                                timestamp: new Date(),
+                                footer: { text: `User ID: ${ban.user.id}` }
+                            };
+                            await channel.send({ embeds: [embed] });
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Error logging ban:', err);
+        }
+    });
+
+    // Log when members are kicked
+    client.on('guildMemberRemove', async (member) => {
+        try {
+            // Fetch audit log to see if this was a kick
+            const auditLogs = await member.guild.fetchAuditLogs({
+                limit: 1,
+                type: 20 // MEMBER_KICK
+            });
+            
+            const kickLog = auditLogs.entries.first();
+            if (kickLog && kickLog.target.id === member.id && Date.now() - kickLog.createdTimestamp < 5000) {
+                const moderator = kickLog.executor;
+                const reason = kickLog.reason || 'No reason provided';
+                
+                // Check if we already logged this kick
+                const recentCase = await db.query(
+                    `SELECT case_id FROM mod_cases WHERE user_id = $1 AND guild_id = $2 AND action = 'kick' 
+                     AND created_at > NOW() - INTERVAL '5 seconds' ORDER BY created_at DESC LIMIT 1`,
+                    [member.id, member.guild.id]
+                );
+                
+                if (recentCase.rows.length === 0) {
+                    // This is an external kick
+                    const caseId = await db.query(
+                        `INSERT INTO mod_cases (user_id, moderator_id, action, reason, guild_id)
+                         VALUES ($1, $2, 'kick', $3, $4) RETURNING case_id`,
+                        [member.id, moderator.id, reason, member.guild.id]
+                    );
+                    
+                    await db.query(
+                        `INSERT INTO mod_logs (case_id, user_id, moderator_id, action, reason, guild_id)
+                         VALUES ($1, $2, $3, 'kick', $4, $5)`,
+                        [caseId.rows[0].case_id, member.id, moderator.id, reason, member.guild.id]
+                    );
+                    
+                    // Send to mod log
+                    const res = await db.query('SELECT channel_id FROM mod_log_channels WHERE guild_id = $1', [member.guild.id]);
+                    if (res.rows.length) {
+                        const channel = member.guild.channels.cache.get(res.rows[0].channel_id);
+                        if (channel && channel.isTextBased()) {
+                            const embed = {
+                                color: 0xff4757,
+                                title: `Case #${caseId.rows[0].case_id} | KICK (External)`,
+                                fields: [
+                                    { name: 'User', value: `<@${member.id}> (${member.user.tag})`, inline: true },
+                                    { name: 'Moderator', value: `<@${moderator.id}>`, inline: true },
+                                    { name: 'Reason', value: reason, inline: false }
+                                ],
+                                timestamp: new Date(),
+                                footer: { text: `User ID: ${member.id}` }
+                            };
+                            await channel.send({ embeds: [embed] });
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Error logging kick:', err);
         }
     });
 
