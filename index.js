@@ -171,6 +171,11 @@ const commands = [
         .setDescription('Set the moderation log channel')
         .addChannelOption(option => option.setName('channel').setDescription('Moderation log channel').setRequired(true))
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
+        .setName('setlogging')
+        .setDescription('Set the logging channel for member joins/leaves')
+        .addChannelOption(option => option.setName('channel').setDescription('Logging channel').setRequired(true))
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 ];
 
 async function registerSlashCommands() {
@@ -1026,6 +1031,28 @@ const client = new Client({
             return;
         }
 
+        if (commandName === 'setlogging') {
+            const channel = interaction.options.getChannel('channel');
+            
+            if (!channel.isTextBased()) {
+                await interaction.reply({ content: 'Please select a text channel.', flags: 64 });
+                return;
+            }
+            
+            try {
+                await db.query(`CREATE TABLE IF NOT EXISTS logging_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+                await db.query(
+                    'INSERT INTO logging_channels (guild_id, channel_id) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2',
+                    [interaction.guild.id, channel.id]
+                );
+                await interaction.reply({ content: `Logging channel set to <#${channel.id}>. Member joins and leaves will be logged here.`, flags: 64 });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error setting logging channel: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
         if (commandName === 'rep') {
             const user = interaction.options.getUser('user') || interaction.user;
             let displayName = user.username;
@@ -1587,6 +1614,123 @@ const client = new Client({
         } catch (err) {
             console.error('Error sending welcome message:', err);
         }
+
+        // Log member join to logging channel
+        try {
+            await db.query(`CREATE TABLE IF NOT EXISTS logging_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+            const logRes = await db.query('SELECT channel_id FROM logging_channels WHERE guild_id = $1', [member.guild.id]);
+            if (logRes.rows.length) {
+                const logChannel = member.guild.channels.cache.get(logRes.rows[0].channel_id);
+                if (logChannel && logChannel.isTextBased()) {
+                    const embed = {
+                        color: 0x00ff00,
+                        title: '📥 Member Joined',
+                        thumbnail: { url: member.user.displayAvatarURL ? member.user.displayAvatarURL() : member.user.avatarURL },
+                        fields: [
+                            { name: 'User', value: `<@${member.id}>`, inline: true },
+                            { name: 'Username', value: member.user.tag, inline: true },
+                            { name: 'Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: false },
+                            { name: 'Member Count', value: `${member.guild.memberCount}`, inline: true }
+                        ],
+                        timestamp: new Date(),
+                        footer: { text: `User ID: ${member.id}` }
+                    };
+                    await logChannel.send({ embeds: [embed] });
+                }
+            }
+        } catch (err) {
+            console.error('Error logging member join:', err);
+        }
+    });
+
+    // Log member leave
+    client.on('guildMemberRemove', async (member) => {
+        try {
+            await db.query(`CREATE TABLE IF NOT EXISTS logging_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+            const logRes = await db.query('SELECT channel_id FROM logging_channels WHERE guild_id = $1', [member.guild.id]);
+            if (logRes.rows.length) {
+                const logChannel = member.guild.channels.cache.get(logRes.rows[0].channel_id);
+                if (logChannel && logChannel.isTextBased()) {
+                    // Check if this was a kick
+                    const auditLogs = await member.guild.fetchAuditLogs({ limit: 1, type: 20 }).catch(() => null);
+                    const kickLog = auditLogs?.entries.first();
+                    const wasKicked = kickLog && kickLog.target.id === member.id && Date.now() - kickLog.createdTimestamp < 5000;
+                    
+                    // Check if this was a ban
+                    const banLogs = await member.guild.fetchAuditLogs({ limit: 1, type: 22 }).catch(() => null);
+                    const banLog = banLogs?.entries.first();
+                    const wasBanned = banLog && banLog.target.id === member.id && Date.now() - banLog.createdTimestamp < 5000;
+                    
+                    // If kicked, log to moderation system (external kick)
+                    if (wasKicked) {
+                        const moderator = kickLog.executor;
+                        const reason = kickLog.reason || 'No reason provided';
+                        
+                        // Check if we already logged this kick
+                        const recentCase = await db.query(
+                            `SELECT case_id FROM mod_cases WHERE user_id = $1 AND guild_id = $2 AND action = 'kick' 
+                             AND created_at > NOW() - INTERVAL '5 seconds' ORDER BY created_at DESC LIMIT 1`,
+                            [member.id, member.guild.id]
+                        );
+                        
+                        if (recentCase.rows.length === 0) {
+                            // This is an external kick - log it
+                            const caseId = await db.query(
+                                `INSERT INTO mod_cases (user_id, moderator_id, action, reason, guild_id)
+                                 VALUES ($1, $2, 'kick', $3, $4) RETURNING case_id`,
+                                [member.id, moderator.id, reason, member.guild.id]
+                            );
+                            
+                            await db.query(
+                                `INSERT INTO mod_logs (case_id, user_id, moderator_id, action, reason, guild_id)
+                                 VALUES ($1, $2, $3, 'kick', $4, $5)`,
+                                [caseId.rows[0].case_id, member.id, moderator.id, reason, member.guild.id]
+                            );
+                            
+                            // Send to mod log channel
+                            const modLogRes = await db.query('SELECT channel_id FROM mod_log_channels WHERE guild_id = $1', [member.guild.id]);
+                            if (modLogRes.rows.length) {
+                                const modChannel = member.guild.channels.cache.get(modLogRes.rows[0].channel_id);
+                                if (modChannel && modChannel.isTextBased()) {
+                                    const embed = {
+                                        color: 0xff4757,
+                                        title: `Case #${caseId.rows[0].case_id} | KICK (External)`,
+                                        fields: [
+                                            { name: 'User', value: `<@${member.id}> (${member.user.tag})`, inline: true },
+                                            { name: 'Moderator', value: `<@${moderator.id}>`, inline: true },
+                                            { name: 'Reason', value: reason, inline: false }
+                                        ],
+                                        timestamp: new Date(),
+                                        footer: { text: `User ID: ${member.id}` }
+                                    };
+                                    await modChannel.send({ embeds: [embed] });
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (!wasKicked && !wasBanned) {
+                        // Regular leave (not kicked or banned) - log to logging channel
+                        const embed = {
+                            color: 0xff0000,
+                            title: '📤 Member Left',
+                            thumbnail: { url: member.user.displayAvatarURL ? member.user.displayAvatarURL() : member.user.avatarURL },
+                            fields: [
+                                { name: 'User', value: `<@${member.id}>`, inline: true },
+                                { name: 'Username', value: member.user.tag, inline: true },
+                                { name: 'Joined Server', value: member.joinedAt ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>` : 'Unknown', inline: false },
+                                { name: 'Member Count', value: `${member.guild.memberCount}`, inline: true }
+                            ],
+                            timestamp: new Date(),
+                            footer: { text: `User ID: ${member.id}` }
+                        };
+                        await logChannel.send({ embeds: [embed] });
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Error logging member leave:', err);
+        }
     });
 
     // === AUTOMOD EVENT LOGGING ===
@@ -1700,65 +1844,7 @@ const client = new Client({
         }
     });
 
-    // Log when members are kicked
-    client.on('guildMemberRemove', async (member) => {
-        try {
-            // Fetch audit log to see if this was a kick
-            const auditLogs = await member.guild.fetchAuditLogs({
-                limit: 1,
-                type: 20 // MEMBER_KICK
-            });
-            
-            const kickLog = auditLogs.entries.first();
-            if (kickLog && kickLog.target.id === member.id && Date.now() - kickLog.createdTimestamp < 5000) {
-                const moderator = kickLog.executor;
-                const reason = kickLog.reason || 'No reason provided';
-                
-                // Check if we already logged this kick
-                const recentCase = await db.query(
-                    `SELECT case_id FROM mod_cases WHERE user_id = $1 AND guild_id = $2 AND action = 'kick' 
-                     AND created_at > NOW() - INTERVAL '5 seconds' ORDER BY created_at DESC LIMIT 1`,
-                    [member.id, member.guild.id]
-                );
-                
-                if (recentCase.rows.length === 0) {
-                    // This is an external kick
-                    const caseId = await db.query(
-                        `INSERT INTO mod_cases (user_id, moderator_id, action, reason, guild_id)
-                         VALUES ($1, $2, 'kick', $3, $4) RETURNING case_id`,
-                        [member.id, moderator.id, reason, member.guild.id]
-                    );
-                    
-                    await db.query(
-                        `INSERT INTO mod_logs (case_id, user_id, moderator_id, action, reason, guild_id)
-                         VALUES ($1, $2, $3, 'kick', $4, $5)`,
-                        [caseId.rows[0].case_id, member.id, moderator.id, reason, member.guild.id]
-                    );
-                    
-                    // Send to mod log
-                    const res = await db.query('SELECT channel_id FROM mod_log_channels WHERE guild_id = $1', [member.guild.id]);
-                    if (res.rows.length) {
-                        const channel = member.guild.channels.cache.get(res.rows[0].channel_id);
-                        if (channel && channel.isTextBased()) {
-                            const embed = {
-                                color: 0xff4757,
-                                title: `Case #${caseId.rows[0].case_id} | KICK (External)`,
-                                fields: [
-                                    { name: 'User', value: `<@${member.id}> (${member.user.tag})`, inline: true },
-                                    { name: 'Moderator', value: `<@${moderator.id}>`, inline: true },
-                                    { name: 'Reason', value: reason, inline: false }
-                                ],
-                                timestamp: new Date(),
-                                footer: { text: `User ID: ${member.id}` }
-                            };
-                            await channel.send({ embeds: [embed] });
-                        }
-                    }
-                }
-            }
-        } catch (err) {
-            console.error('Error logging kick:', err);
-        }
-    });
+    // === MODERATION EVENT LOGGING (External kicks) ===
+    // Note: guildMemberRemove for leaves and kicks is already handled above with logging channel
 
     client.login(process.env.BOT_TOKEN);
