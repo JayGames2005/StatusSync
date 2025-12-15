@@ -412,7 +412,7 @@ async function fetchCommands() {
 // Premium Functions
 async function loadPremium() {
     try {
-        const guildId = document.getElementById('server-select').value;
+        const guildId = document.getElementById('guild-select').value;
         if (!guildId) {
             document.getElementById('premium-tier').innerHTML = `
                 <div style="background: #2c2f33; padding: 1rem; border-radius: 8px;">
@@ -497,7 +497,7 @@ async function loadPremium() {
 
 async function savePremiumSettings() {
     try {
-        const guildId = document.getElementById('server-select').value;
+        const guildId = document.getElementById('guild-select').value;
         if (!guildId) {
             alert('Please select a server first');
             return;
@@ -532,7 +532,7 @@ async function savePremiumSettings() {
 
 async function loadBackups() {
     try {
-        const guildId = document.getElementById('server-select').value;
+        const guildId = document.getElementById('guild-select').value;
         const backups = await apiRequest(`/dashboard/api/backup/list?guild_id=${guildId}`);
         
         const backupList = document.getElementById('backup-list');
@@ -573,7 +573,7 @@ async function loadBackups() {
 
 async function createBackup() {
     try {
-        const guildId = document.getElementById('server-select').value;
+        const guildId = document.getElementById('guild-select').value;
         if (!guildId) {
             alert('Please select a server first');
             return;
@@ -606,7 +606,7 @@ async function restoreBackup(backupId) {
     }
     
     try {
-        const guildId = document.getElementById('server-select').value;
+        const guildId = document.getElementById('guild-select').value;
         
         const response = await fetch('/dashboard/api/backup/restore', {
             method: 'POST',
@@ -631,7 +631,7 @@ async function restoreBackup(backupId) {
 
 async function upgradePremium(tier) {
     try {
-        const guildId = document.getElementById('server-select').value;
+        const guildId = document.getElementById('guild-select').value;
         if (!guildId) {
             alert('Please select a server first');
             return;
