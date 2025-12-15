@@ -7,37 +7,202 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header>
-        <h1>StatusSync Dashboard</h1>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <h1>📊 StatusSync Dashboard</h1>
+            <div class="guild-selector">
+                <label for="guild-id">Server ID:</label>
+                <input type="text" id="guild-id" placeholder="Enter your Discord Server ID">
+                <button onclick="loadDashboard()" class="btn-primary">Load</button>
+            </div>
+        </div>
     </header>
-    <main>
-        <section id="modlogs">
-            <h2>Mod Logs</h2>
-            <div id="modlogs-list"></div>
-        </section>
-        <section id="cases">
-            <h2>Cases</h2>
-            <div id="cases-list"></div>
-        </section>
-        <section id="userhistory">
-            <h2>User History</h2>
-            <input type="text" id="user-id-input" placeholder="User ID">
-            <button onclick="fetchUserHistory()">Fetch</button>
-            <div id="userhistory-list"></div>
-        </section>
-        <section id="settings">
-            <h2>Server Settings</h2>
-            <div id="settings-info"></div>
-        </section>
-        <section id="stats">
-            <h2>Statistics</h2>
-            <div id="stats-info"></div>
-        </section>
-        <section id="widgets">
-            <h2>Widgets</h2>
-            <div id="widgets-list"></div>
-        </section>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="container">
+            <button onclick="showTab('overview')" class="nav-btn active" data-tab="overview">Overview</button>
+            <button onclick="showTab('moderation')" class="nav-btn" data-tab="moderation">Moderation</button>
+            <button onclick="showTab('leaderboards')" class="nav-btn" data-tab="leaderboards">Leaderboards</button>
+            <button onclick="showTab('settings')" class="nav-btn" data-tab="settings">Settings</button>
+            <button onclick="showTab('logs')" class="nav-btn" data-tab="logs">Logs</button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Loading State -->
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Loading dashboard...</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="error" class="error" style="display: none;">
+            <h2>⚠️ Error</h2>
+            <p id="error-message"></p>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="tab-overview" class="tab-content active">
+            <h2>Server Overview</h2>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-info">
+                        <h3 id="stat-users">0</h3>
+                        <p>Total Users</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⚖️</div>
+                    <div class="stat-info">
+                        <h3 id="stat-cases">0</h3>
+                        <p>Mod Cases</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">💬</div>
+                    <div class="stat-info">
+                        <h3 id="stat-commands">0</h3>
+                        <p>Custom Commands</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="card">
+                    <h3>📈 Top Users by Reputation</h3>
+                    <div id="top-rep" class="list"></div>
+                </div>
+                <div class="card">
+                    <h3>🎯 Top Users by XP</h3>
+                    <div id="top-xp" class="list"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>📊 Moderation Activity (by Type)</h3>
+                <div id="cases-chart"></div>
+            </div>
+        </div>
+
+        <!-- Moderation Tab -->
+        <div id="tab-moderation" class="tab-content">
+            <h2>Moderation Panel</h2>
+            
+            <div class="card">
+                <h3>🔍 Search User History</h3>
+                <div class="search-bar">
+                    <input type="text" id="user-id-input" placeholder="Enter Discord User ID">
+                    <button onclick="fetchUserHistory()" class="btn-primary">Search</button>
+                </div>
+                <div id="userhistory-list" class="list"></div>
+            </div>
+
+            <div class="card">
+                <h3>📋 Recent Mod Cases</h3>
+                <div class="table-responsive">
+                    <table id="cases-table">
+                        <thead>
+                            <tr>
+                                <th>Case #</th>
+                                <th>User ID</th>
+                                <th>Action</th>
+                                <th>Reason</th>
+                                <th>Moderator</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cases-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Leaderboards Tab -->
+        <div id="tab-leaderboards" class="tab-content">
+            <h2>Leaderboards</h2>
+            
+            <div class="grid">
+                <div class="card">
+                    <h3>🏆 Reputation Leaders</h3>
+                    <div id="rep-leaderboard" class="leaderboard"></div>
+                </div>
+                <div class="card">
+                    <h3>⚡ XP Leaders (All Time)</h3>
+                    <div id="xp-leaderboard" class="leaderboard"></div>
+                </div>
+                <div class="card">
+                    <h3>📅 Weekly XP Leaders</h3>
+                    <div id="weekly-leaderboard" class="leaderboard"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="tab-settings" class="tab-content">
+            <h2>Server Configuration</h2>
+            
+            <div class="grid">
+                <div class="card">
+                    <h3>👋 Welcome Channel</h3>
+                    <p id="setting-welcome" class="setting-value">Not configured</p>
+                </div>
+                <div class="card">
+                    <h3>⚖️ Mod Log Channel</h3>
+                    <p id="setting-modlog" class="setting-value">Not configured</p>
+                </div>
+                <div class="card">
+                    <h3>📝 Logging Channel</h3>
+                    <p id="setting-logging" class="setting-value">Not configured</p>
+                </div>
+                <div class="card">
+                    <h3>⭐ Starboard Settings</h3>
+                    <div id="setting-starboard" class="setting-value">Not configured</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>🔧 Custom Commands</h3>
+                <div id="commands-list" class="list"></div>
+            </div>
+        </div>
+
+        <!-- Logs Tab -->
+        <div id="tab-logs" class="tab-content">
+            <h2>Moderation Logs</h2>
+            
+            <div class="card">
+                <div class="table-responsive">
+                    <table id="logs-table">
+                        <thead>
+                            <tr>
+                                <th>Log ID</th>
+                                <th>Case #</th>
+                                <th>User ID</th>
+                                <th>Moderator ID</th>
+                                <th>Action</th>
+                                <th>Reason</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logs-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>StatusSync Dashboard © 2025 | Made with ❤️ for Discord</p>
+        </div>
+    </footer>
+
     <script src="frontend.js"></script>
 </body>
 </html>
