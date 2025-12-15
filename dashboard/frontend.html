@@ -33,6 +33,7 @@
             <button onclick="showTab('leaderboards')" class="nav-btn" data-tab="leaderboards">Leaderboards</button>
             <button onclick="showTab('settings')" class="nav-btn" data-tab="settings">Settings</button>
             <button onclick="showTab('logs')" class="nav-btn" data-tab="logs">Logs</button>
+            <button onclick="showTab('premium')" class="nav-btn" data-tab="premium">💎 Premium</button>
         </div>
     </nav>
 
@@ -199,6 +200,22 @@
                         <tbody id="logs-tbody"></tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+
+        <!-- Premium Tab -->
+        <div id="tab-premium" class="tab-content">
+            <h2>💎 Premium Features</h2>
+            
+            <!-- Current Status -->
+            <div class="card" id="premium-status">
+                <h3>Current Subscription</h3>
+                <p id="premium-tier">Loading...</p>
+            </div>
+
+            <!-- Premium Tiers -->
+            <div id="premium-tiers" class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-top: 2rem;">
+                <!-- Tiers will be loaded here -->
             </div>
         </div>
     </main>

@@ -99,6 +99,11 @@ function showTab(tabName) {
     
     // Add active to clicked button
     document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+    
+    // Load tab-specific data
+    if (tabName === 'premium') {
+        loadPremium();
+    }
 }
 
 // Load Dashboard
@@ -401,6 +406,92 @@ async function fetchCommands() {
         `).join('');
     } catch (err) {
         console.error('Error fetching commands:', err);
+    }
+}
+
+// Premium Functions
+async function loadPremium() {
+    try {
+        const guildId = document.getElementById('server-select').value;
+        if (!guildId) return;
+        
+        // Load current status
+        const status = await apiRequest(`/dashboard/premium/status?guild_id=${guildId}`);
+        const statusDiv = document.getElementById('premium-tier');
+        
+        if (status.premium) {
+            statusDiv.innerHTML = `
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 1rem; border-radius: 8px; color: white;">
+                    <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                        <span>✅</span> ${status.tier.charAt(0).toUpperCase() + status.tier.slice(1)} Premium Active
+                    </h3>
+                    ${status.expires_at ? `<p style="margin: 0.5rem 0 0 0; opacity: 0.9;">Renews: ${new Date(status.expires_at).toLocaleDateString()}</p>` : ''}
+                </div>
+            `;
+        } else {
+            statusDiv.innerHTML = `
+                <div style="background: #2c2f33; padding: 1rem; border-radius: 8px;">
+                    <p style="margin: 0;">No active premium subscription. Upgrade below to unlock premium features!</p>
+                </div>
+            `;
+        }
+        
+        // Load available tiers
+        const tiers = await apiRequest('/dashboard/premium/tiers');
+        const tiersDiv = document.getElementById('premium-tiers');
+        
+        tiersDiv.innerHTML = tiers.map(tier => `
+            <div class="card" style="text-align: center; ${status.tier === tier.id ? 'border: 2px solid #667eea;' : ''}">
+                <h3>${tier.name}</h3>
+                <div style="font-size: 2rem; font-weight: bold; color: #667eea; margin: 1rem 0;">
+                    $${tier.price.toFixed(2)}<span style="font-size: 1rem; color: #99aab5;">/month</span>
+                </div>
+                <ul style="text-align: left; list-style: none; padding: 0; margin: 1rem 0;">
+                    ${tier.features.map(f => `<li style="padding: 0.5rem 0;">✅ ${f}</li>`).join('')}
+                </ul>
+                ${status.tier === tier.id 
+                    ? '<button disabled style="opacity: 0.5; cursor: not-allowed;">Current Plan</button>'
+                    : tier.stripeEnabled 
+                        ? `<button onclick="upgradePremium('${tier.id}')" class="btn">Upgrade to ${tier.name}</button>`
+                        : '<button disabled style="opacity: 0.5; cursor: not-allowed;">Coming Soon</button>'
+                }
+            </div>
+        `).join('');
+    } catch (err) {
+        console.error('Error loading premium:', err);
+    }
+}
+
+async function upgradePremium(tier) {
+    try {
+        const guildId = document.getElementById('server-select').value;
+        if (!guildId) {
+            alert('Please select a server first');
+            return;
+        }
+        
+        // Create Stripe checkout session
+        const response = await fetch('/dashboard/premium/checkout', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: 'include',
+            body: JSON.stringify({ guild_id: guildId, tier })
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to create checkout session');
+        }
+        
+        const data = await response.json();
+        
+        // Redirect to Stripe checkout
+        window.location.href = data.url;
+    } catch (err) {
+        console.error('Error upgrading premium:', err);
+        alert('Failed to start checkout: ' + err.message);
     }
 }
 

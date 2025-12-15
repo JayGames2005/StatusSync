@@ -179,6 +179,9 @@ const commands = [
     new SlashCommandBuilder()
         .setName('dashboard')
         .setDescription('Get the link to the StatusSync dashboard'),
+    new SlashCommandBuilder()
+        .setName('premium')
+        .setDescription('Check your server\'s premium status'),
 ];
 
 async function registerSlashCommands() {
@@ -210,6 +213,62 @@ const { generateRepCard } = require('./repCard');
 
 // Require customCommands for custom command handling
 const customCommands = require('./custom_commands');
+
+// Premium tracking cache
+let premiumCache = new Map(); // guild_id -> { premium: boolean, tier: string, expires: timestamp }
+
+// Helper: Check if guild has active premium
+async function checkPremium(guildId) {
+    // Check cache first (expires after 5 minutes)
+    const cached = premiumCache.get(guildId);
+    if (cached && Date.now() < cached.expires) {
+        return cached;
+    }
+    
+    try {
+        const result = await db.query(
+            'SELECT tier, status, expires_at FROM premium_subscriptions WHERE guild_id = $1',
+            [guildId]
+        );
+        
+        let premiumData = { premium: false, tier: null };
+        
+        if (result.rows.length > 0) {
+            const sub = result.rows[0];
+            const isActive = sub.status === 'active' && 
+                           (!sub.expires_at || new Date(sub.expires_at) > new Date());
+            
+            if (isActive) {
+                premiumData = { premium: true, tier: sub.tier };
+            }
+        }
+        
+        // Cache for 5 minutes
+        premiumCache.set(guildId, { ...premiumData, expires: Date.now() + 300000 });
+        return premiumData;
+    } catch (err) {
+        console.error('Premium check error:', err);
+        return { premium: false, tier: null };
+    }
+}
+
+// Helper: Get premium feature value
+async function getPremiumFeature(guildId, feature, defaultValue = null) {
+    try {
+        const result = await db.query(
+            `SELECT ${feature} FROM premium_features WHERE guild_id = $1`,
+            [guildId]
+        );
+        
+        if (result.rows.length > 0 && result.rows[0][feature] !== null) {
+            return result.rows[0][feature];
+        }
+    } catch (err) {
+        console.error(`Error fetching premium feature ${feature}:`, err);
+    }
+    
+    return defaultValue;
+}
 
 // Helper: get user's rep card background color
 async function getUserBgColor(userId) {
@@ -297,9 +356,17 @@ if (process.env.ENABLE_DASHBOARD === 'true') {
     apiRouter.setAuth(requireAuth); // Pass auth middleware to API
     app.use('/dashboard/api', apiRouter);
     
+    // Setup premium/payment routes
+    const premiumRouter = require('./dashboard/premium');
+    premiumRouter.init(requireAuth);
+    app.use('/dashboard/premium', premiumRouter);
+    
     app.get('/dash', (req, res) => res.redirect('/dashboard/frontend.html'));
     
     console.log('✅ Dashboard enabled with Discord OAuth2');
+    if (process.env.STRIPE_SECRET_KEY) {
+        console.log('💳 Stripe payments enabled');
+    }
 }
 
 app.listen(PORT, () => {
@@ -1141,6 +1208,49 @@ app.listen(PORT, () => {
             return;
         }
 
+        if (commandName === 'premium') {
+            const premiumData = await checkPremium(interaction.guild.id);
+            
+            if (premiumData.premium) {
+                const tierNames = {
+                    basic: '✨ Basic Premium',
+                    pro: '🌟 Pro Premium',
+                    enterprise: '💎 Enterprise'
+                };
+                
+                const embed = {
+                    color: 0x667eea,
+                    title: '💎 Premium Status',
+                    description: `This server has **${tierNames[premiumData.tier] || premiumData.tier}** active!`,
+                    fields: [
+                        { name: '🎁 Features Unlocked', value: 'Access all premium features in `/dashboard`', inline: false },
+                        { name: '⚙️ Manage Subscription', value: 'Use `/dashboard` to manage your premium features', inline: false }
+                    ],
+                    footer: { text: 'Thank you for supporting StatusSync!' },
+                    timestamp: new Date()
+                };
+                
+                await interaction.reply({ embeds: [embed], flags: 64 });
+            } else {
+                const dashboardUrl = process.env.DASHBOARD_URL || process.env.CALLBACK_URL?.replace('/dashboard/auth/callback', '') || 'https://statussync-production.up.railway.app';
+                
+                const embed = {
+                    color: 0x5865F2,
+                    title: '💎 Premium Status',
+                    description: 'This server does not have an active premium subscription.',
+                    fields: [
+                        { name: '✨ Premium Features', value: '• Custom bot status\n• XP multipliers\n• Custom embed colors\n• Auto-moderation rules\n• Custom welcome images\n• Detailed analytics\n• Priority support\n• And more!', inline: false },
+                        { name: '🚀 Upgrade Now', value: `[Visit the dashboard](${dashboardUrl}/dashboard/frontend.html) to view plans and upgrade!`, inline: false }
+                    ],
+                    footer: { text: 'Starting at $4.99/month' },
+                    timestamp: new Date()
+                };
+                
+                await interaction.reply({ embeds: [embed], flags: 64 });
+            }
+            return;
+        }
+
         if (commandName === 'rep') {
             const user = interaction.options.getUser('user') || interaction.user;
             let displayName = user.username;
@@ -1493,6 +1603,12 @@ app.listen(PORT, () => {
             xpToAdd = 5;
         }
         if (xpToAdd > 0) {
+            // Apply premium XP multiplier if available
+            if (message.guild) {
+                const multiplier = await getPremiumFeature(message.guild.id, 'xp_multiplier', 1.0);
+                xpToAdd = Math.floor(xpToAdd * multiplier);
+            }
+            
             await db.query('INSERT INTO user_xp (user_id, xp) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + $2', [message.author.id, xpToAdd]);
             // Weekly XP: use week_start and reset on new week
             const weekStart = getCurrentWeekStart();
