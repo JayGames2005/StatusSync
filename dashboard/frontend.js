@@ -422,8 +422,10 @@ async function loadPremium() {
             return;
         }
         
-        // Load current status
-        const status = await apiRequest(`/dashboard/premium/status?guild_id=${guildId}`);
+        // Load current status (use direct fetch, not apiRequest)
+        const statusResponse = await fetch(`/dashboard/premium/status?guild_id=${guildId}`, { credentials: 'include' });
+        if (!statusResponse.ok) throw new Error(`Failed to fetch premium status`);
+        const status = await statusResponse.json();
         const statusDiv = document.getElementById('premium-tier');
         
         if (status.premium) {
@@ -451,8 +453,10 @@ async function loadPremium() {
             controlsDiv.style.display = 'block';
             tiersDiv.style.display = 'none';
             
-            // Load current premium features
-            const features = await apiRequest(`/dashboard/premium/features?guild_id=${guildId}`);
+            // Load current premium features (use direct fetch)
+            const featuresResponse = await fetch(`/dashboard/premium/features?guild_id=${guildId}`, { credentials: 'include' });
+            if (!featuresResponse.ok) throw new Error('Failed to fetch features');
+            const features = await featuresResponse.json();
             document.getElementById('custom-status').value = features.custom_status || '';
             document.getElementById('xp-multiplier').value = features.xp_multiplier || 1.0;
             document.getElementById('embed-color').value = features.embed_color || '#5865F2';
@@ -465,8 +469,10 @@ async function loadPremium() {
             controlsDiv.style.display = 'none';
             tiersDiv.style.display = 'grid';
             
-            // Load available tiers
-            const tiers = await apiRequest('/dashboard/premium/tiers');
+            // Load available tiers (use direct fetch)
+            const tiersResponse = await fetch('/dashboard/premium/tiers', { credentials: 'include' });
+            if (!tiersResponse.ok) throw new Error('Failed to fetch tiers');
+            const tiers = await tiersResponse.json();
             
             tiersDiv.innerHTML = tiers.map(tier => `
                 <div class="card" style="text-align: center;">
