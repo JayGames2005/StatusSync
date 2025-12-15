@@ -281,7 +281,10 @@ if (process.env.ENABLE_DASHBOARD === 'true') {
     }));
     
     app.use('/dashboard', express.static(path.join(__dirname, 'dashboard')));
-    app.use('/dashboard/api', require('./dashboard/api'));
+    
+    const apiRouter = require('./dashboard/api');
+    apiRouter.setClient(client); // Pass Discord client to API
+    app.use('/dashboard/api', apiRouter);
     
     app.get('/dash', (req, res) => res.redirect('/dashboard/frontend.html'));
     

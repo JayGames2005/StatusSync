@@ -3,6 +3,28 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 
+// Get bot's client instance (set by main bot)
+let client = null;
+router.setClient = (discordClient) => {
+    client = discordClient;
+};
+
+// Get list of guilds bot is in
+router.get('/guilds', (req, res) => {
+    if (!client || !client.isReady()) {
+        return res.status(503).json({ error: 'Bot is not ready' });
+    }
+    
+    const guilds = client.guilds.cache.map(guild => ({
+        id: guild.id,
+        name: guild.name,
+        memberCount: guild.memberCount,
+        icon: guild.iconURL()
+    }));
+    
+    res.json(guilds);
+});
+
 // Middleware to check guild_id
 const requireGuildId = (req, res, next) => {
     const { guild_id } = req.query;

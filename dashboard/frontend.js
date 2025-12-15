@@ -1,6 +1,43 @@
 // StatusSync Dashboard - Frontend Logic
 let currentGuildId = null;
 
+// Load available guilds on page load
+async function loadGuilds() {
+    try {
+        const response = await fetch('/dashboard/api/guilds');
+        const guilds = await response.json();
+        
+        const select = document.getElementById('guild-select');
+        select.innerHTML = '<option value="">Select a server...</option>';
+        
+        guilds.forEach(guild => {
+            const option = document.createElement('option');
+            option.value = guild.id;
+            option.textContent = `${guild.name} (${guild.memberCount} members)`;
+            select.appendChild(option);
+        });
+        
+        // Auto-select last used guild
+        const lastGuildId = localStorage.getItem('lastGuildId');
+        if (lastGuildId) {
+            select.value = lastGuildId;
+            selectGuild();
+        }
+    } catch (err) {
+        console.error('Failed to load guilds:', err);
+        document.getElementById('guild-select').innerHTML = '<option value="">Failed to load servers</option>';
+    }
+}
+
+// Select guild from dropdown
+function selectGuild() {
+    const guildId = document.getElementById('guild-select').value;
+    if (guildId) {
+        document.getElementById('guild-id').value = guildId;
+        loadDashboard();
+    }
+}
+
 // Tab Management
 function showTab(tabName) {
     // Hide all tabs
@@ -25,7 +62,7 @@ async function loadDashboard() {
     const guildId = document.getElementById('guild-id').value.trim();
     
     if (!guildId) {
-        showError('Please enter a Guild ID');
+        showError('Please select or enter a Server ID');
         return;
     }
     
@@ -336,12 +373,7 @@ function hideError() {
 
 // Initialize
 window.onload = () => {
-    // Load last guild ID if available
-    const lastGuildId = localStorage.getItem('lastGuildId');
-    if (lastGuildId) {
-        document.getElementById('guild-id').value = lastGuildId;
-        loadDashboard();
-    } else {
-        hideLoading();
-    }
+    // Load available servers
+    loadGuilds();
+    hideLoading();
 };
