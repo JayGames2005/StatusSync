@@ -436,29 +436,183 @@ async function loadPremium() {
             `;
         }
         
-        // Load available tiers
-        const tiers = await apiRequest('/dashboard/premium/tiers');
+        // Show/hide premium controls
+        const controlsDiv = document.getElementById('premium-controls');
         const tiersDiv = document.getElementById('premium-tiers');
         
-        tiersDiv.innerHTML = tiers.map(tier => `
-            <div class="card" style="text-align: center; ${status.tier === tier.id ? 'border: 2px solid #667eea;' : ''}">
-                <h3>${tier.name}</h3>
-                <div style="font-size: 2rem; font-weight: bold; color: #667eea; margin: 1rem 0;">
-                    $${tier.price.toFixed(2)}<span style="font-size: 1rem; color: #99aab5;">/month</span>
-                </div>
-                <ul style="text-align: left; list-style: none; padding: 0; margin: 1rem 0;">
-                    ${tier.features.map(f => `<li style="padding: 0.5rem 0;">✅ ${f}</li>`).join('')}
-                </ul>
-                ${status.tier === tier.id 
-                    ? '<button disabled style="opacity: 0.5; cursor: not-allowed;">Current Plan</button>'
-                    : tier.stripeEnabled 
+        if (status.premium) {
+            controlsDiv.style.display = 'block';
+            tiersDiv.style.display = 'none';
+            
+            // Load current premium features
+            const features = await apiRequest(`/dashboard/premium/features?guild_id=${guildId}`);
+            document.getElementById('custom-status').value = features.custom_status || '';
+            document.getElementById('xp-multiplier').value = features.xp_multiplier || 1.0;
+            document.getElementById('embed-color').value = features.embed_color || '#5865F2';
+            document.getElementById('auto-mod-enabled').checked = features.auto_mod_enabled || false;
+            document.getElementById('custom-welcome-enabled').checked = features.custom_welcome_enabled || false;
+            
+            // Load backups
+            loadBackups();
+        } else {
+            controlsDiv.style.display = 'none';
+            tiersDiv.style.display = 'grid';
+            
+            // Load available tiers
+            const tiers = await apiRequest('/dashboard/premium/tiers');
+            
+            tiersDiv.innerHTML = tiers.map(tier => `
+                <div class="card" style="text-align: center;">
+                    <h3>${tier.name}</h3>
+                    <div style="font-size: 2rem; font-weight: bold; color: #667eea; margin: 1rem 0;">
+                        $${tier.price.toFixed(2)}<span style="font-size: 1rem; color: #99aab5;">/month</span>
+                    </div>
+                    <ul style="text-align: left; list-style: none; padding: 0; margin: 1rem 0;">
+                        ${tier.features.map(f => `<li style="padding: 0.5rem 0;">✅ ${f}</li>`).join('')}
+                    </ul>
+                    ${tier.stripeEnabled 
                         ? `<button onclick="upgradePremium('${tier.id}')" class="btn">Upgrade to ${tier.name}</button>`
                         : '<button disabled style="opacity: 0.5; cursor: not-allowed;">Coming Soon</button>'
-                }
-            </div>
-        `).join('');
+                    }
+                </div>
+            `).join('');
+        }
     } catch (err) {
         console.error('Error loading premium:', err);
+    }
+}
+
+async function savePremiumSettings() {
+    try {
+        const guildId = document.getElementById('server-select').value;
+        if (!guildId) {
+            alert('Please select a server first');
+            return;
+        }
+        
+        const settings = {
+            guild_id: guildId,
+            custom_status: document.getElementById('custom-status').value,
+            xp_multiplier: parseFloat(document.getElementById('xp-multiplier').value),
+            embed_color: document.getElementById('embed-color').value,
+            auto_mod_enabled: document.getElementById('auto-mod-enabled').checked,
+            custom_welcome_enabled: document.getElementById('custom-welcome-enabled').checked
+        };
+        
+        const response = await fetch('/dashboard/premium/features', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(settings)
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to save settings');
+        }
+        
+        alert('✅ Premium settings saved successfully!');
+    } catch (err) {
+        console.error('Error saving premium settings:', err);
+        alert('❌ Failed to save settings: ' + err.message);
+    }
+}
+
+async function loadBackups() {
+    try {
+        const guildId = document.getElementById('server-select').value;
+        const backups = await apiRequest(`/dashboard/api/backup/list?guild_id=${guildId}`);
+        
+        const backupList = document.getElementById('backup-list');
+        
+        if (backups.length === 0) {
+            backupList.innerHTML = '<p style="color: #99aab5; margin-top: 1rem;">No backups yet</p>';
+            return;
+        }
+        
+        backupList.innerHTML = `
+            <table style="width: 100%; margin-top: 1rem;">
+                <thead>
+                    <tr>
+                        <th style="text-align: left;">Created</th>
+                        <th style="text-align: left;">Server</th>
+                        <th style="text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${backups.map(b => `
+                        <tr>
+                            <td>${new Date(b.created_at).toLocaleString()}</td>
+                            <td>${b.guild_name}</td>
+                            <td style="text-align: right;">
+                                <button onclick="restoreBackup(${b.id})" class="btn" style="font-size: 0.8rem; padding: 0.25rem 0.5rem; background: #667eea;">
+                                    ↻ Restore
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    } catch (err) {
+        console.error('Error loading backups:', err);
+    }
+}
+
+async function createBackup() {
+    try {
+        const guildId = document.getElementById('server-select').value;
+        if (!guildId) {
+            alert('Please select a server first');
+            return;
+        }
+        
+        const response = await fetch('/dashboard/api/backup/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ guild_id: guildId })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert('✅ Backup created successfully!');
+            loadBackups();
+        } else {
+            alert('❌ Failed to create backup: ' + result.error);
+        }
+    } catch (err) {
+        console.error('Error creating backup:', err);
+        alert('❌ Failed to create backup: ' + err.message);
+    }
+}
+
+async function restoreBackup(backupId) {
+    if (!confirm('Are you sure you want to restore this backup? This will overwrite current settings.')) {
+        return;
+    }
+    
+    try {
+        const guildId = document.getElementById('server-select').value;
+        
+        const response = await fetch('/dashboard/api/backup/restore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ guild_id: guildId, backup_id: backupId })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert('✅ Backup restored successfully!');
+            location.reload();
+        } else {
+            alert('❌ Failed to restore backup: ' + result.error);
+        }
+    } catch (err) {
+        console.error('Error restoring backup:', err);
+        alert('❌ Failed to restore backup: ' + err.message);
     }
 }
 

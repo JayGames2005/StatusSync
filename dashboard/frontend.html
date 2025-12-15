@@ -213,7 +213,73 @@
                 <p id="premium-tier">Loading...</p>
             </div>
 
-            <!-- Premium Tiers -->
+            <!-- Premium Feature Controls (only shown if premium active) -->
+            <div id="premium-controls" style="display: none; margin-top: 2rem;">
+                <div class="card">
+                    <h3>⚙️ Premium Settings</h3>
+                    
+                    <div style="margin: 1rem 0;">
+                        <label style="display: block; margin-bottom: 0.5rem;">
+                            <strong>Custom Bot Status</strong>
+                            <input type="text" id="custom-status" placeholder="Enter custom status..." 
+                                   style="width: 100%; padding: 0.5rem; margin-top: 0.25rem; background: #2c2f33; border: 1px solid #40444b; color: white; border-radius: 4px;">
+                        </label>
+                    </div>
+                    
+                    <div style="margin: 1rem 0;">
+                        <label style="display: block; margin-bottom: 0.5rem;">
+                            <strong>XP Multiplier</strong>
+                            <input type="number" id="xp-multiplier" min="1" max="5" step="0.1" value="1.0"
+                                   style="width: 100%; padding: 0.5rem; margin-top: 0.25rem; background: #2c2f33; border: 1px solid #40444b; color: white; border-radius: 4px;">
+                            <small style="color: #99aab5;">1.0 = normal, 2.0 = double XP, max 5.0</small>
+                        </label>
+                    </div>
+                    
+                    <div style="margin: 1rem 0;">
+                        <label style="display: block; margin-bottom: 0.5rem;">
+                            <strong>Custom Embed Color</strong>
+                            <input type="color" id="embed-color" value="#5865F2"
+                                   style="width: 100%; height: 40px; padding: 0.25rem; margin-top: 0.25rem; background: #2c2f33; border: 1px solid #40444b; cursor: pointer; border-radius: 4px;">
+                        </label>
+                    </div>
+                    
+                    <div style="margin: 1rem 0;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="auto-mod-enabled">
+                            <strong>Enable Advanced Auto-Moderation</strong>
+                        </label>
+                        <small style="color: #99aab5; margin-left: 1.5rem;">Spam filter, bad words, link blocking, caps lock detection</small>
+                    </div>
+                    
+                    <div style="margin: 1rem 0;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="custom-welcome-enabled">
+                            <strong>Enable Custom Welcome Messages</strong>
+                        </label>
+                        <small style="color: #99aab5; margin-left: 1.5rem;">Rich embeds with member stats and images</small>
+                    </div>
+                    
+                    <button onclick="savePremiumSettings()" class="btn" style="margin-top: 1rem; background: #667eea;">
+                        💾 Save Settings
+                    </button>
+                </div>
+                
+                <!-- Backup & Restore -->
+                <div class="card" style="margin-top: 1rem;">
+                    <h3>💾 Backup & Restore</h3>
+                    <p style="color: #99aab5; margin-bottom: 1rem;">Save and restore your server configuration</p>
+                    
+                    <button onclick="createBackup()" class="btn" style="background: #3ba55d;">
+                        📦 Create Backup
+                    </button>
+                    
+                    <div id="backup-list" style="margin-top: 1rem;">
+                        <!-- Backups will be loaded here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Premium Tiers (shown if no premium) -->
             <div id="premium-tiers" class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-top: 2rem;">
                 <!-- Tiers will be loaded here -->
             </div>

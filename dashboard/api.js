@@ -263,4 +263,188 @@ router.get('/activity', authMiddleware,  requireGuildId, async (req, res) => {
     }
 });
 
+// === ANALYTICS (Premium Feature) ===
+router.get('/analytics/messages', authMiddleware, requireGuildId, async (req, res) => {
+    try {
+        const { guild_id, days = 7 } = req.query;
+        
+        // Message activity over time (from logging)
+        const result = await db.query(
+            `SELECT DATE(timestamp) as date, COUNT(*) as count 
+             FROM mod_logs 
+             WHERE guild_id = $1 AND action = 'message_create' 
+             AND timestamp > NOW() - INTERVAL '${parseInt(days)} days'
+             GROUP BY DATE(timestamp) 
+             ORDER BY date`,
+            [guild_id]
+        );
+        
+        res.json({ data: result.rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/analytics/users', authMiddleware, requireGuildId, async (req, res) => {
+    try {
+        const { guild_id } = req.query;
+        
+        // Top active users by XP
+        const xpResult = await db.query(
+            `SELECT user_id, xp FROM user_xp ORDER BY xp DESC LIMIT 10`
+        );
+        
+        // Top users by reputation
+        const repResult = await db.query(
+            `SELECT user_id, rep FROM user_rep ORDER BY rep DESC LIMIT 10`
+        );
+        
+        res.json({
+            topXP: xpResult.rows,
+            topRep: repResult.rows
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/analytics/moderation', authMiddleware, requireGuildId, async (req, res) => {
+    try {
+        const { guild_id, days = 30 } = req.query;
+        
+        // Mod actions over time
+        const actionsResult = await db.query(
+            `SELECT DATE(created_at) as date, action, COUNT(*) as count 
+             FROM mod_cases 
+             WHERE guild_id = $1 AND created_at > NOW() - INTERVAL '${parseInt(days)} days'
+             GROUP BY DATE(created_at), action 
+             ORDER BY date`,
+            [guild_id]
+        );
+        
+        // Auto-mod violations (if premium)
+        const violationsResult = await db.query(
+            `SELECT DATE(timestamp) as date, rule_type, COUNT(*) as count 
+             FROM automod_violations 
+             WHERE guild_id = $1 AND timestamp > NOW() - INTERVAL '${parseInt(days)} days'
+             GROUP BY DATE(timestamp), rule_type 
+             ORDER BY date`,
+            [guild_id]
+        );
+        
+        res.json({
+            actions: actionsResult.rows,
+            violations: violationsResult.rows
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/analytics/growth', authMiddleware, requireGuildId, async (req, res) => {
+    try {
+        const { guild_id } = req.query;
+        const guild = client.guilds.cache.get(guild_id);
+        
+        if (!guild) {
+            return res.status(404).json({ error: 'Guild not found' });
+        }
+        
+        res.json({
+            memberCount: guild.memberCount,
+            roleCount: guild.roles.cache.size,
+            channelCount: guild.channels.cache.size,
+            boostLevel: guild.premiumTier,
+            boostCount: guild.premiumSubscriptionCount || 0
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// === AUTO-MOD API ===
+router.get('/automod/rules', authMiddleware, requireGuildId, async (req, res) => {
+    try {
+        const { guild_id } = req.query;
+        const automod = require('../automod');
+        const rules = await automod.getRules(guild_id);
+        res.json(rules);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/automod/rules', authMiddleware, requireGuildId, async (req, res) => {
+    try {
+        const { guild_id, rule_type, enabled, action, threshold, config } = req.body;
+        const automod = require('../automod');
+        await automod.setRule(guild_id, rule_type, enabled, action, threshold, config || {});
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/automod/violations', authMiddleware, requireGuildId, async (req, res) => {
+    try {
+        const { guild_id, limit = 50 } = req.query;
+        const automod = require('../automod');
+        const violations = await automod.getViolations(guild_id, parseInt(limit));
+        res.json(violations);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// === BACKUP & RESTORE API (Premium Feature) ===
+router.post('/backup/create', authMiddleware, requireGuildId, async (req, res) => {
+    try {
+        const { guild_id } = req.body;
+        const guild = client.guilds.cache.get(guild_id);
+        
+        if (!guild) {
+            return res.status(404).json({ error: 'Guild not found' });
+        }
+        
+        const backup = require('../backup');
+        const result = await backup.createBackup(guild_id, guild.name);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/backup/list', authMiddleware, requireGuildId, async (req, res) => {
+    try {
+        const { guild_id } = req.query;
+        const backup = require('../backup');
+        const backups = await backup.listBackups(guild_id);
+        res.json(backups);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/backup/restore', authMiddleware, requireGuildId, async (req, res) => {
+    try {
+        const { guild_id, backup_id } = req.body;
+        const backup = require('../backup');
+        const result = await backup.restoreBackup(guild_id, backup_id);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.delete('/backup/:id', authMiddleware, requireGuildId, async (req, res) => {
+    try {
+        const { guild_id } = req.query;
+        const backup = require('../backup');
+        const result = await backup.deleteBackup(guild_id, req.params.id);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

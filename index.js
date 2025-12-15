@@ -270,6 +270,15 @@ async function getPremiumFeature(guildId, feature, defaultValue = null) {
     return defaultValue;
 }
 
+// Helper: Get premium embed color
+async function getPremiumEmbedColor(guildId, defaultColor = 0x5865F2) {
+    const customColor = await getPremiumFeature(guildId, 'embed_color');
+    if (customColor) {
+        return parseInt(customColor.replace('#', ''), 16);
+    }
+    return defaultColor;
+}
+
 // Helper: get user's rep card background color
 async function getUserBgColor(userId) {
     await db.query(`CREATE TABLE IF NOT EXISTS user_rep_settings (user_id VARCHAR(32) PRIMARY KEY, background_color VARCHAR(16))`);
@@ -1549,6 +1558,14 @@ app.listen(PORT, () => {
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 
+        // === AUTO-MODERATION (Premium Feature) ===
+        const autoModEnabled = await getPremiumFeature(message.guild.id, 'auto_mod_enabled', false);
+        if (autoModEnabled) {
+            const automod = require('./automod');
+            const premiumData = await checkPremium(message.guild.id);
+            await automod.checkMessage(message, premiumData.premium);
+        }
+
         // === MESSAGE LOGGING ===
         try {
             await db.query(`CREATE TABLE IF NOT EXISTS logging_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
@@ -1974,11 +1991,41 @@ app.listen(PORT, () => {
                 bgColor
             });
 
-            // Send welcome message with rep card
-            await channel.send({
-                content: `Welcome to the server, <@${member.id}>! 🎉 Here is your rep card:`,
-                files: [{ attachment: buffer, name: 'rep_card.png' }]
-            });
+            // Check for premium custom welcome
+            const customWelcomeEnabled = await getPremiumFeature(member.guild.id, 'custom_welcome_enabled', false);
+            const embedColor = await getPremiumEmbedColor(member.guild.id, 0x00ff00);
+            
+            if (customWelcomeEnabled) {
+                // Premium welcome with rich embed
+                const embed = {
+                    color: embedColor,
+                    title: `🎉 Welcome to ${member.guild.name}!`,
+                    description: `Hey <@${member.id}>, we're excited to have you here!`,
+                    thumbnail: { url: member.user.displayAvatarURL() || member.user.avatarURL },
+                    fields: [
+                        { name: '👤 Member', value: `${member.user.tag}`, inline: true },
+                        { name: '📊 Member #', value: `${member.guild.memberCount}`, inline: true },
+                        { name: '⭐ Reputation', value: `${userRep}`, inline: true },
+                        { name: '🎯 Level', value: `${level}`, inline: true },
+                        { name: '💫 XP', value: `${xp}`, inline: true },
+                        { name: '🏆 Rank', value: `#${rank}`, inline: true }
+                    ],
+                    image: { url: 'attachment://rep_card.png' },
+                    footer: { text: `Welcome! • ${member.guild.name}`, icon_url: member.guild.iconURL() },
+                    timestamp: new Date()
+                };
+
+                await channel.send({
+                    embeds: [embed],
+                    files: [{ attachment: buffer, name: 'rep_card.png' }]
+                });
+            } else {
+                // Standard welcome message
+                await channel.send({
+                    content: `Welcome to the server, <@${member.id}>! 🎉 Here is your rep card:`,
+                    files: [{ attachment: buffer, name: 'rep_card.png' }]
+                });
+            }
         } catch (err) {
             console.error('Error sending welcome message:', err);
         }
@@ -2209,6 +2256,25 @@ app.listen(PORT, () => {
             }
         } catch (err) {
             console.error('Error logging ban:', err);
+        }
+    });
+
+    // === READY EVENT - Set Custom Bot Status ===
+    client.once('ready', async () => {
+        console.log(`✅ Logged in as ${client.user.tag}`);
+        
+        // Apply custom bot status from first premium server
+        try {
+            for (const guild of client.guilds.cache.values()) {
+                const customStatus = await getPremiumFeature(guild.id, 'custom_status');
+                if (customStatus) {
+                    client.user.setActivity(customStatus);
+                    console.log(`🎨 Using custom status from ${guild.name}: ${customStatus}`);
+                    break;
+                }
+            }
+        } catch (err) {
+            console.error('Error setting custom status:', err);
         }
     });
 
