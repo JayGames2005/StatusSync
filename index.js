@@ -176,6 +176,9 @@ const commands = [
         .setDescription('Set the logging channel for member joins/leaves')
         .addChannelOption(option => option.setName('channel').setDescription('Logging channel').setRequired(true))
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
+        .setName('dashboard')
+        .setDescription('Get the link to the StatusSync dashboard'),
 ];
 
 async function registerSlashCommands() {
@@ -1116,6 +1119,25 @@ app.listen(PORT, () => {
                 console.error(err);
                 await interaction.reply({ content: 'Error setting logging channel: ' + err.message, flags: 64 });
             }
+            return;
+        }
+
+        if (commandName === 'dashboard') {
+            const dashboardUrl = process.env.DASHBOARD_URL || process.env.CALLBACK_URL?.replace('/dashboard/auth/callback', '') || 'https://statussync-production.up.railway.app';
+            
+            const embed = {
+                color: 0x5865F2,
+                title: '📊 StatusSync Dashboard',
+                description: 'Access the web dashboard to view stats, manage moderation, and configure settings.',
+                fields: [
+                    { name: '🔗 Dashboard Link', value: `[Click here to open dashboard](${dashboardUrl}/dashboard/frontend.html)`, inline: false },
+                    { name: '🔐 Login Required', value: 'You must have Administrator permissions in this server to access the dashboard.', inline: false }
+                ],
+                footer: { text: 'StatusSync Dashboard' },
+                timestamp: new Date()
+            };
+            
+            await interaction.reply({ embeds: [embed], flags: 64 });
             return;
         }
 
