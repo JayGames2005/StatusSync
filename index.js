@@ -240,26 +240,59 @@ const client = new Client({
     partials: [Partials.Channel, Partials.Message]
 });
 
-// Health check HTTP server for Railway
-const http = require('http');
+// Integrated HTTP server (health check + optional dashboard)
+const express = require('express');
+const session = require('express-session');
+const path = require('path');
+const app = express();
 const PORT = process.env.PORT || 3000;
-const server = http.createServer((req, res) => {
-    if (req.url === '/' || req.url === '/health') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-            status: 'ok', 
-            uptime: process.uptime(),
-            botReady: client.isReady(),
-            timestamp: new Date().toISOString()
-        }));
-    } else {
-        res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('Not Found');
-    }
+
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        uptime: process.uptime(),
+        botReady: client.isReady(),
+        timestamp: new Date().toISOString()
+    });
 });
 
-server.listen(PORT, () => {
-    console.log(`Health check server listening on port ${PORT}`);
+app.get('/', (req, res) => {
+    res.json({ 
+        status: 'ok', 
+        uptime: process.uptime(),
+        botReady: client.isReady(),
+        timestamp: new Date().toISOString(),
+        message: 'StatusSync Bot is running'
+    });
+});
+
+// Optional dashboard (if ENABLE_DASHBOARD=true)
+if (process.env.ENABLE_DASHBOARD === 'true') {
+    app.use(session({
+        secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
+        resave: false,
+        saveUninitialized: false,
+        cookie: { secure: false }
+    }));
+    
+    app.use('/dashboard', express.static(path.join(__dirname, 'dashboard')));
+    app.use('/dashboard/api', require('./dashboard/api'));
+    
+    app.get('/dash', (req, res) => res.redirect('/dashboard/frontend.html'));
+    
+    console.log('✅ Dashboard enabled');
+}
+
+app.listen(PORT, () => {
+    console.log(`✅ HTTP server listening on port ${PORT}`);
+    if (process.env.ENABLE_DASHBOARD === 'true') {
+        console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard/frontend.html`);
+    }
 });
 
     // Handle slash commands
@@ -2034,9 +2067,3 @@ server.listen(PORT, () => {
     // Note: guildMemberRemove for leaves and kicks is already handled above with logging channel
 
     client.login(process.env.BOT_TOKEN);
-
-    // Optional: Start dashboard if ENABLE_DASHBOARD=true
-    if (process.env.ENABLE_DASHBOARD === 'true') {
-        console.log('Starting dashboard server...');
-        require('./dashboard/server');
-    }
