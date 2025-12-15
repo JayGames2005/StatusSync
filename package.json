@@ -10,7 +10,12 @@
   "engines": {
     "node": ">=18.x"
   },
-  "keywords": ["discord", "bot", "moderation", "dashboard"],
+  "keywords": [
+    "discord",
+    "bot",
+    "moderation",
+    "dashboard"
+  ],
   "author": "",
   "license": "ISC",
   "description": "Discord bot with moderation, XP system, reputation, and web dashboard",
@@ -19,8 +24,10 @@
     "discord.js": "^14.25.1",
     "dotenv": "^17.2.3",
     "express": "^4.18.2",
-    "express-session": "^1.17.3",
+    "express-session": "^1.18.2",
     "node-fetch": "^2.7.0",
+    "passport": "^0.7.0",
+    "passport-discord": "^0.1.4",
     "pg": "^8.16.3"
   }
 }

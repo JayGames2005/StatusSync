@@ -5,34 +5,47 @@ const db = require('../db');
 
 // Get bot's client instance (set by main bot)
 let client = null;
+let requireAuth = null;
+
 router.setClient = (discordClient) => {
     client = discordClient;
 };
 
-// Middleware to check admin key
-const requireAuth = (req, res, next) => {
-    const adminKey = process.env.DASHBOARD_ADMIN_KEY;
-    
-    // If no admin key is set, allow access (backward compatibility)
-    if (!adminKey) {
-        return next();
-    }
-    
-    const providedKey = req.headers['x-admin-key'] || req.query.admin_key;
-    
-    if (providedKey !== adminKey) {
-        return res.status(401).json({ error: 'Unauthorized: Invalid admin key' });
-    }
-    
-    next();
+router.setAuth = (authMiddleware) => {
+    requireAuth = authMiddleware;
 };
 
-// Get list of guilds bot is in
-router.get('/guilds', requireAuth, (req, res) => {
+// Get list of guilds bot is in (with auth)
+router.get('/guilds', (req, res, next) => {
+    if (requireAuth) return requireAuth(req, res, next);
+    next();
+}, (req, res) => {
     if (!client || !client.isReady()) {
         return res.status(503).json({ error: 'Bot is not ready' });
     }
     
+    // If authenticated, only return guilds user has admin in
+    if (req.isAuthenticated && req.isAuthenticated()) {
+        const userGuilds = req.user.guilds || [];
+        const botGuilds = client.guilds.cache;
+        
+        const mutualGuilds = userGuilds
+            .filter(ug => botGuilds.has(ug.id))
+            .filter(ug => (parseInt(ug.permissions) & 0x8) === 0x8)
+            .map(ug => {
+                const guild = botGuilds.get(ug.id);
+                return {
+                    id: guild.id,
+                    name: guild.name,
+                    memberCount: guild.memberCount,
+                    icon: guild.iconURL()
+                };
+            });
+        
+        return res.json(mutualGuilds);
+    }
+    
+    // Fallback: return all guilds (if no auth required)
     const guilds = client.guilds.cache.map(guild => ({
         id: guild.id,
         name: guild.name,
@@ -52,9 +65,17 @@ const requireGuildId = (req, res, next) => {
     next();
 };
 
+// Auth middleware wrapper - applies auth if configured
+const authMiddleware = (req, res, next) => {
+    if (requireAuth) {
+        return requireAuth(req, res, next);
+    }
+    next();
+};
+
 // === MODERATION ===
 // Fetch mod logs
-router.get('/modlogs', requireAuth, requireGuildId, async (req, res) => {
+router.get('/modlogs', authMiddleware, requireGuildId, async (req, res) => {
     try {
         const { guild_id, limit = 50 } = req.query;
         const logs = await db.query(
@@ -68,7 +89,7 @@ router.get('/modlogs', requireAuth, requireGuildId, async (req, res) => {
 });
 
 // Fetch mod cases
-router.get('/cases', requireAuth, requireGuildId, async (req, res) => {
+router.get('/cases', authMiddleware, requireGuildId, async (req, res) => {
     try {
         const { guild_id, limit = 50 } = req.query;
         const cases = await db.query(
@@ -82,7 +103,7 @@ router.get('/cases', requireAuth, requireGuildId, async (req, res) => {
 });
 
 // Fetch user moderation history
-router.get('/userhistory', requireAuth, async (req, res) => {
+router.get('/userhistory', authMiddleware,  async (req, res) => {
     try {
         const { user_id, guild_id } = req.query;
         if (!user_id || !guild_id) {
@@ -99,7 +120,7 @@ router.get('/userhistory', requireAuth, async (req, res) => {
 });
 
 // === SETTINGS ===
-router.get('/settings', requireAuth, requireGuildId, async (req, res) => {
+router.get('/settings', authMiddleware,  requireGuildId, async (req, res) => {
     try {
         const { guild_id } = req.query;
         const welcome = await db.query('SELECT * FROM welcome_channels WHERE guild_id = $1', [guild_id]);
@@ -119,7 +140,7 @@ router.get('/settings', requireAuth, requireGuildId, async (req, res) => {
 });
 
 // === STATISTICS ===
-router.get('/stats', requireAuth, requireGuildId, async (req, res) => {
+router.get('/stats', authMiddleware,  requireGuildId, async (req, res) => {
     try {
         const { guild_id } = req.query;
         
@@ -158,7 +179,7 @@ router.get('/stats', requireAuth, requireGuildId, async (req, res) => {
 });
 
 // === LEADERBOARDS ===
-router.get('/leaderboard/rep', requireAuth, async (req, res) => {
+router.get('/leaderboard/rep', authMiddleware,  async (req, res) => {
     try {
         const { limit = 10 } = req.query;
         const rep = await db.query(
@@ -171,7 +192,7 @@ router.get('/leaderboard/rep', requireAuth, async (req, res) => {
     }
 });
 
-router.get('/leaderboard/xp', requireAuth, async (req, res) => {
+router.get('/leaderboard/xp', authMiddleware,  async (req, res) => {
     try {
         const { limit = 10 } = req.query;
         const xp = await db.query(
@@ -184,7 +205,7 @@ router.get('/leaderboard/xp', requireAuth, async (req, res) => {
     }
 });
 
-router.get('/leaderboard/weekly', requireAuth, async (req, res) => {
+router.get('/leaderboard/weekly', authMiddleware,  async (req, res) => {
     try {
         const { limit = 10 } = req.query;
         const weekly = await db.query(
@@ -198,7 +219,7 @@ router.get('/leaderboard/weekly', requireAuth, async (req, res) => {
 });
 
 // === CUSTOM COMMANDS ===
-router.get('/commands', requireAuth, async (req, res) => {
+router.get('/commands', authMiddleware,  async (req, res) => {
     try {
         const commands = await db.query('SELECT name, response FROM custom_commands ORDER BY name');
         res.json(commands.rows);
@@ -208,7 +229,7 @@ router.get('/commands', requireAuth, async (req, res) => {
 });
 
 // === STARBOARD ===
-router.get('/starboard', requireAuth, requireGuildId, async (req, res) => {
+router.get('/starboard', authMiddleware,  requireGuildId, async (req, res) => {
     try {
         const { guild_id, limit = 20 } = req.query;
         const posts = await db.query(
@@ -222,7 +243,7 @@ router.get('/starboard', requireAuth, requireGuildId, async (req, res) => {
 });
 
 // === ACTIVITY ===
-router.get('/activity', requireAuth, requireGuildId, async (req, res) => {
+router.get('/activity', authMiddleware,  requireGuildId, async (req, res) => {
     try {
         const { guild_id } = req.query;
         

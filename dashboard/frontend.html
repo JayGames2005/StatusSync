@@ -11,16 +11,16 @@
     <header class="header">
         <div class="container">
             <h1>📊 StatusSync Dashboard</h1>
-            <div class="guild-selector">
-                <label for="admin-key">Admin Key:</label>
-                <input type="password" id="admin-key" placeholder="Enter admin key" style="width: 180px;">
-                <label for="guild-select" style="margin-left: 15px;">Server:</label>
+            <div class="guild-selector" id="guild-selector" style="display: none;">
+                <label for="guild-select">Server:</label>
                 <select id="guild-select" onchange="selectGuild()">
-                    <option value="">Loading servers...</option>
+                    <option value="">Select a server...</option>
                 </select>
-                <span style="margin: 0 10px;">or</span>
-                <input type="text" id="guild-id" placeholder="Enter Server ID manually" style="width: 180px;">
                 <button onclick="loadDashboard()" class="btn-primary">Load</button>
+                <button onclick="logout()" class="btn-secondary" style="margin-left: 10px;">Logout</button>
+            </div>
+            <div id="login-container">
+                <button onclick="login()" class="btn-primary">Login with Discord</button>
             </div>
         </div>
     </header>

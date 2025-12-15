@@ -277,18 +277,26 @@ if (process.env.ENABLE_DASHBOARD === 'true') {
         secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
         resave: false,
         saveUninitialized: false,
-        cookie: { secure: false }
+        cookie: { 
+            secure: false,
+            maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        }
     }));
+    
+    // Setup Discord OAuth2
+    const setupAuth = require('./dashboard/auth');
+    const { requireAuth } = setupAuth(app, client);
     
     app.use('/dashboard', express.static(path.join(__dirname, 'dashboard')));
     
     const apiRouter = require('./dashboard/api');
-    apiRouter.setClient(client); // Pass Discord client to API
+    apiRouter.setClient(client);
+    apiRouter.setAuth(requireAuth); // Pass auth middleware to API
     app.use('/dashboard/api', apiRouter);
     
     app.get('/dash', (req, res) => res.redirect('/dashboard/frontend.html'));
     
-    console.log('✅ Dashboard enabled');
+    console.log('✅ Dashboard enabled with Discord OAuth2');
 }
 
 app.listen(PORT, () => {

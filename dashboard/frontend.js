@@ -1,36 +1,66 @@
 // StatusSync Dashboard - Frontend Logic
 let currentGuildId = null;
-let adminKey = null;
+let currentUser = null;
 
-// Load available guilds on page load
-async function loadGuilds() {
+// Check authentication status
+async function checkAuth() {
     try {
-        adminKey = document.getElementById('admin-key').value.trim();
-        if (adminKey) {
-            localStorage.setItem('adminKey', adminKey);
+        const response = await fetch('/dashboard/auth/user');
+        const data = await response.json();
+        
+        if (data.authenticated) {
+            currentUser = data.user;
+            document.getElementById('login-container').style.display = 'none';
+            document.getElementById('guild-selector').style.display = 'block';
+            loadGuilds(data.guilds);
+            return true;
         } else {
-            adminKey = localStorage.getItem('adminKey') || '';
+            document.getElementById('login-container').style.display = 'block';
+            document.getElementById('guild-selector').style.display = 'none';
+            hideLoading();
+            return false;
         }
-        
-        const headers = adminKey ? { 'x-admin-key': adminKey } : {};
-        const response = await fetch('/dashboard/api/guilds', { headers });
-        
-        if (response.status === 401) {
-            showError('Invalid admin key. Please check your DASHBOARD_ADMIN_KEY.');
-            return;
-        }
-        
-        const guilds = await response.json();
-        
+    } catch (err) {
+        console.error('Auth check failed:', err);
+        return false;
+    }
+}
+
+// Login with Discord
+function login() {
+    window.location.href = '/dashboard/auth/login';
+}
+
+// Logout
+function logout() {
+    window.location.href = '/dashboard/auth/logout';
+}
+
+// Load available guilds
+async function loadGuilds(userGuilds) {
+    try {
         const select = document.getElementById('guild-select');
         select.innerHTML = '<option value="">Select a server...</option>';
         
-        guilds.forEach(guild => {
-            const option = document.createElement('option');
-            option.value = guild.id;
-            option.textContent = `${guild.name} (${guild.memberCount} members)`;
-            select.appendChild(option);
-        });
+        if (userGuilds && userGuilds.length > 0) {
+            userGuilds.forEach(guild => {
+                const option = document.createElement('option');
+                option.value = guild.id;
+                option.textContent = `${guild.name} (${guild.memberCount || 'N/A'} members)`;
+                select.appendChild(option);
+            });
+        } else {
+            // Fetch from API if not provided
+            const response = await fetch('/dashboard/api/guilds');
+            const guilds = await response.json();
+            
+            guilds.forEach(guild => {
+                const option = document.createElement('option');
+                option.value = guild.id;
+                option.textContent = `${guild.name} (${guild.memberCount} members)`;
+                select.appendChild(option);
+            });
+        }
         
         // Auto-select last used guild
         const lastGuildId = localStorage.getItem('lastGuildId');
@@ -48,8 +78,7 @@ async function loadGuilds() {
 function selectGuild() {
     const guildId = document.getElementById('guild-select').value;
     if (guildId) {
-        document.getElementById('guild-id').value = guildId;
-        loadDashboard();
+        loadDashboard(guildId);
     }
 }
 
@@ -73,18 +102,13 @@ function showTab(tabName) {
 }
 
 // Load Dashboard
-async function loadDashboard() {
-    const guildId = document.getElementById('guild-id').value.trim();
-    adminKey = document.getElementById('admin-key').value.trim();
-    
-    if (adminKey) {
-        localStorage.setItem('adminKey', adminKey);
-    } else {
-        adminKey = localStorage.getItem('adminKey') || '';
+async function loadDashboard(guildId) {
+    if (!guildId) {
+        guildId = document.getElementById('guild-select').value.trim();
     }
     
     if (!guildId) {
-        showError('Please select or enter a Server ID');
+        showError('Please select a server');
         return;
     }
     
@@ -113,10 +137,11 @@ async function loadDashboard() {
 // API Helpers
 async function apiRequest(endpoint) {
     const url = `/dashboard/api/${endpoint}${endpoint.includes('?') ? '&' : '?'}guild_id=${currentGuildId}`;
-    const headers = adminKey ? { 'x-admin-key': adminKey } : {};
-    const response = await fetch(url, { headers });
+    const response = await fetch(url, { credentials: 'include' });
     if (response.status === 401) {
-        throw new Error('Unauthorized: Invalid admin key');
+        showError('Session expired. Please login again.');
+        setTimeout(() => window.location.reload(), 2000);
+        throw new Error('Unauthorized');
     }
     if (!response.ok) {
         throw new Error(`Failed to fetch ${endpoint}`);
@@ -398,15 +423,10 @@ function hideError() {
 }
 
 // Initialize
-window.onload = () => {
-    // Restore admin key from localStorage
-    const savedKey = localStorage.getItem('adminKey');
-    if (savedKey) {
-        document.getElementById('admin-key').value = savedKey;
-        adminKey = savedKey;
+window.onload = async () => {
+    showLoading();
+    const authenticated = await checkAuth();
+    if (!authenticated) {
+        hideLoading();
     }
-    
-    // Load available servers
-    loadGuilds();
-    hideLoading();
 };
