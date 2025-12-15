@@ -9,8 +9,26 @@ router.setClient = (discordClient) => {
     client = discordClient;
 };
 
+// Middleware to check admin key
+const requireAuth = (req, res, next) => {
+    const adminKey = process.env.DASHBOARD_ADMIN_KEY;
+    
+    // If no admin key is set, allow access (backward compatibility)
+    if (!adminKey) {
+        return next();
+    }
+    
+    const providedKey = req.headers['x-admin-key'] || req.query.admin_key;
+    
+    if (providedKey !== adminKey) {
+        return res.status(401).json({ error: 'Unauthorized: Invalid admin key' });
+    }
+    
+    next();
+};
+
 // Get list of guilds bot is in
-router.get('/guilds', (req, res) => {
+router.get('/guilds', requireAuth, (req, res) => {
     if (!client || !client.isReady()) {
         return res.status(503).json({ error: 'Bot is not ready' });
     }
@@ -36,7 +54,7 @@ const requireGuildId = (req, res, next) => {
 
 // === MODERATION ===
 // Fetch mod logs
-router.get('/modlogs', requireGuildId, async (req, res) => {
+router.get('/modlogs', requireAuth, requireGuildId, async (req, res) => {
     try {
         const { guild_id, limit = 50 } = req.query;
         const logs = await db.query(
@@ -50,7 +68,7 @@ router.get('/modlogs', requireGuildId, async (req, res) => {
 });
 
 // Fetch mod cases
-router.get('/cases', requireGuildId, async (req, res) => {
+router.get('/cases', requireAuth, requireGuildId, async (req, res) => {
     try {
         const { guild_id, limit = 50 } = req.query;
         const cases = await db.query(
@@ -64,7 +82,7 @@ router.get('/cases', requireGuildId, async (req, res) => {
 });
 
 // Fetch user moderation history
-router.get('/userhistory', async (req, res) => {
+router.get('/userhistory', requireAuth, async (req, res) => {
     try {
         const { user_id, guild_id } = req.query;
         if (!user_id || !guild_id) {
@@ -81,7 +99,7 @@ router.get('/userhistory', async (req, res) => {
 });
 
 // === SETTINGS ===
-router.get('/settings', requireGuildId, async (req, res) => {
+router.get('/settings', requireAuth, requireGuildId, async (req, res) => {
     try {
         const { guild_id } = req.query;
         const welcome = await db.query('SELECT * FROM welcome_channels WHERE guild_id = $1', [guild_id]);
@@ -101,7 +119,7 @@ router.get('/settings', requireGuildId, async (req, res) => {
 });
 
 // === STATISTICS ===
-router.get('/stats', requireGuildId, async (req, res) => {
+router.get('/stats', requireAuth, requireGuildId, async (req, res) => {
     try {
         const { guild_id } = req.query;
         
@@ -140,7 +158,7 @@ router.get('/stats', requireGuildId, async (req, res) => {
 });
 
 // === LEADERBOARDS ===
-router.get('/leaderboard/rep', async (req, res) => {
+router.get('/leaderboard/rep', requireAuth, async (req, res) => {
     try {
         const { limit = 10 } = req.query;
         const rep = await db.query(
@@ -153,7 +171,7 @@ router.get('/leaderboard/rep', async (req, res) => {
     }
 });
 
-router.get('/leaderboard/xp', async (req, res) => {
+router.get('/leaderboard/xp', requireAuth, async (req, res) => {
     try {
         const { limit = 10 } = req.query;
         const xp = await db.query(
@@ -166,7 +184,7 @@ router.get('/leaderboard/xp', async (req, res) => {
     }
 });
 
-router.get('/leaderboard/weekly', async (req, res) => {
+router.get('/leaderboard/weekly', requireAuth, async (req, res) => {
     try {
         const { limit = 10 } = req.query;
         const weekly = await db.query(
@@ -180,7 +198,7 @@ router.get('/leaderboard/weekly', async (req, res) => {
 });
 
 // === CUSTOM COMMANDS ===
-router.get('/commands', async (req, res) => {
+router.get('/commands', requireAuth, async (req, res) => {
     try {
         const commands = await db.query('SELECT name, response FROM custom_commands ORDER BY name');
         res.json(commands.rows);
@@ -190,7 +208,7 @@ router.get('/commands', async (req, res) => {
 });
 
 // === STARBOARD ===
-router.get('/starboard', requireGuildId, async (req, res) => {
+router.get('/starboard', requireAuth, requireGuildId, async (req, res) => {
     try {
         const { guild_id, limit = 20 } = req.query;
         const posts = await db.query(
@@ -204,7 +222,7 @@ router.get('/starboard', requireGuildId, async (req, res) => {
 });
 
 // === ACTIVITY ===
-router.get('/activity', requireGuildId, async (req, res) => {
+router.get('/activity', requireAuth, requireGuildId, async (req, res) => {
     try {
         const { guild_id } = req.query;
         

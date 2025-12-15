@@ -1,10 +1,25 @@
 // StatusSync Dashboard - Frontend Logic
 let currentGuildId = null;
+let adminKey = null;
 
 // Load available guilds on page load
 async function loadGuilds() {
     try {
-        const response = await fetch('/dashboard/api/guilds');
+        adminKey = document.getElementById('admin-key').value.trim();
+        if (adminKey) {
+            localStorage.setItem('adminKey', adminKey);
+        } else {
+            adminKey = localStorage.getItem('adminKey') || '';
+        }
+        
+        const headers = adminKey ? { 'x-admin-key': adminKey } : {};
+        const response = await fetch('/dashboard/api/guilds', { headers });
+        
+        if (response.status === 401) {
+            showError('Invalid admin key. Please check your DASHBOARD_ADMIN_KEY.');
+            return;
+        }
+        
         const guilds = await response.json();
         
         const select = document.getElementById('guild-select');
@@ -60,6 +75,13 @@ function showTab(tabName) {
 // Load Dashboard
 async function loadDashboard() {
     const guildId = document.getElementById('guild-id').value.trim();
+    adminKey = document.getElementById('admin-key').value.trim();
+    
+    if (adminKey) {
+        localStorage.setItem('adminKey', adminKey);
+    } else {
+        adminKey = localStorage.getItem('adminKey') || '';
+    }
     
     if (!guildId) {
         showError('Please select or enter a Server ID');
@@ -91,7 +113,11 @@ async function loadDashboard() {
 // API Helpers
 async function apiRequest(endpoint) {
     const url = `/dashboard/api/${endpoint}${endpoint.includes('?') ? '&' : '?'}guild_id=${currentGuildId}`;
-    const response = await fetch(url);
+    const headers = adminKey ? { 'x-admin-key': adminKey } : {};
+    const response = await fetch(url, { headers });
+    if (response.status === 401) {
+        throw new Error('Unauthorized: Invalid admin key');
+    }
     if (!response.ok) {
         throw new Error(`Failed to fetch ${endpoint}`);
     }
@@ -373,6 +399,13 @@ function hideError() {
 
 // Initialize
 window.onload = () => {
+    // Restore admin key from localStorage
+    const savedKey = localStorage.getItem('adminKey');
+    if (savedKey) {
+        document.getElementById('admin-key').value = savedKey;
+        adminKey = savedKey;
+    }
+    
     // Load available servers
     loadGuilds();
     hideLoading();

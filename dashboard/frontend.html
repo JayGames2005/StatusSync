@@ -12,12 +12,14 @@
         <div class="container">
             <h1>📊 StatusSync Dashboard</h1>
             <div class="guild-selector">
-                <label for="guild-select">Server:</label>
+                <label for="admin-key">Admin Key:</label>
+                <input type="password" id="admin-key" placeholder="Enter admin key" style="width: 180px;">
+                <label for="guild-select" style="margin-left: 15px;">Server:</label>
                 <select id="guild-select" onchange="selectGuild()">
                     <option value="">Loading servers...</option>
                 </select>
                 <span style="margin: 0 10px;">or</span>
-                <input type="text" id="guild-id" placeholder="Enter Server ID manually" style="width: 200px;">
+                <input type="text" id="guild-id" placeholder="Enter Server ID manually" style="width: 180px;">
                 <button onclick="loadDashboard()" class="btn-primary">Load</button>
             </div>
         </div>
