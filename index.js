@@ -1138,6 +1138,14 @@ app.listen(PORT, () => {
             const reason = interaction.options.getString('reason') || 'No reason provided';
             
             try {
+                // Ensure closed columns exist (migration for existing tables)
+                await db.query(`
+                    ALTER TABLE mod_cases 
+                    ADD COLUMN IF NOT EXISTS closed_at TIMESTAMP,
+                    ADD COLUMN IF NOT EXISTS closed_by VARCHAR(32),
+                    ADD COLUMN IF NOT EXISTS close_reason TEXT
+                `).catch(() => {}); // Ignore if already exists
+                
                 // Check if case exists
                 const res = await db.query(
                     'SELECT * FROM mod_cases WHERE case_id = $1 AND guild_id = $2',
