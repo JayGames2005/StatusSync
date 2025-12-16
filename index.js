@@ -188,6 +188,20 @@ const commands = [
     new SlashCommandBuilder()
         .setName('premium')
         .setDescription('Check your server\'s premium status'),
+    new SlashCommandBuilder()
+        .setName('grantpremium')
+        .setDescription('Grant premium to a server (bot owner only)')
+        .addStringOption(option => option.setName('guild_id').setDescription('Server ID').setRequired(true))
+        .addStringOption(option => 
+            option.setName('tier')
+                .setDescription('Premium tier')
+                .setRequired(true)
+                .addChoices(
+                    { name: 'Basic', value: 'basic' },
+                    { name: 'Pro', value: 'pro' },
+                    { name: 'Enterprise', value: 'enterprise' }
+                )
+        ),
 ];
 
 async function registerSlashCommands() {
@@ -1353,6 +1367,55 @@ app.listen(PORT, () => {
                 };
                 
                 await interaction.reply({ embeds: [embed], flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'grantpremium') {
+            // Bot owner only
+            const botOwnerId = '781269165165346867'; // Replace with your Discord user ID
+            if (interaction.user.id !== botOwnerId) {
+                await interaction.reply({ content: '❌ This command can only be used by the bot owner.', flags: 64 });
+                return;
+            }
+            
+            const guildId = interaction.options.getString('guild_id');
+            const tier = interaction.options.getString('tier');
+            
+            try {
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS premium_subscriptions (
+                        guild_id VARCHAR(32) PRIMARY KEY,
+                        tier VARCHAR(16) NOT NULL,
+                        stripe_customer_id VARCHAR(255),
+                        stripe_subscription_id VARCHAR(255),
+                        status VARCHAR(16) DEFAULT 'active',
+                        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        expires_at TIMESTAMP,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                `);
+                
+                await db.query(`
+                    INSERT INTO premium_subscriptions (guild_id, tier, status, started_at) 
+                    VALUES ($1, $2, 'active', CURRENT_TIMESTAMP) 
+                    ON CONFLICT (guild_id) 
+                    DO UPDATE SET tier = $2, status = 'active', started_at = CURRENT_TIMESTAMP
+                `, [guildId, tier]);
+                
+                const tierNames = {
+                    basic: '✨ Basic Premium',
+                    pro: '🌟 Pro Premium',
+                    enterprise: '💎 Enterprise'
+                };
+                
+                await interaction.reply({ 
+                    content: `✅ Successfully granted **${tierNames[tier]}** to server \`${guildId}\`!`, 
+                    flags: 64 
+                });
+            } catch (err) {
+                console.error('Error granting premium:', err);
+                await interaction.reply({ content: `❌ Failed to grant premium: ${err.message}`, flags: 64 });
             }
             return;
         }
