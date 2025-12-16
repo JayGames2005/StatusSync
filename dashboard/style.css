@@ -420,6 +420,29 @@ tr:hover {
     color: white;
 }
 
+.automod-rule {
+    padding: 1rem;
+    background: #23272a;
+    border-radius: 8px;
+    border-left: 3px solid #667eea;
+}
+
+.automod-rule input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.automod-rule input[type="number"],
+.automod-rule select,
+.automod-rule textarea {
+    font-family: inherit;
+}
+
+.automod-rule strong {
+    font-size: 1.05rem;
+}
+
 /* Chart */
 .chart-bar {
     margin-bottom: 15px;

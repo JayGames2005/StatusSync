@@ -547,6 +547,9 @@ async function loadPremium() {
             document.getElementById('auto-mod-enabled').checked = features.auto_mod_enabled || false;
             document.getElementById('custom-welcome-enabled').checked = features.custom_welcome_enabled || false;
             
+            // Load auto-mod rules
+            loadAutoModRules();
+            
             // Load backups
             loadBackups();
         } else {
@@ -716,6 +719,150 @@ async function restoreBackup(backupId) {
     } catch (err) {
         console.error('Error restoring backup:', err);
         alert('❌ Failed to restore backup: ' + err.message);
+    }
+}
+
+async function loadAutoModRules() {
+    try {
+        const guildId = document.getElementById('guild-select').value;
+        const rules = await apiRequest(`/dashboard/api/automod/rules?guild_id=${guildId}`);
+        
+        // Create a map for easy access
+        const rulesMap = {};
+        rules.forEach(rule => {
+            rulesMap[rule.rule_type] = rule;
+        });
+        
+        // Load spam rule
+        if (rulesMap['spam']) {
+            document.getElementById('rule-spam-enabled').checked = rulesMap['spam'].enabled;
+            document.getElementById('rule-spam-threshold').value = rulesMap['spam'].threshold || 5;
+            document.getElementById('rule-spam-action').value = rulesMap['spam'].action || 'warn';
+        }
+        
+        // Load bad words rule
+        if (rulesMap['bad_words']) {
+            document.getElementById('rule-badwords-enabled').checked = rulesMap['bad_words'].enabled;
+            document.getElementById('rule-badwords-action').value = rulesMap['bad_words'].action || 'warn';
+            const words = rulesMap['bad_words'].config?.words || [];
+            document.getElementById('rule-badwords-config').value = words.join(', ');
+        }
+        
+        // Load links rule
+        if (rulesMap['links']) {
+            document.getElementById('rule-links-enabled').checked = rulesMap['links'].enabled;
+            document.getElementById('rule-links-action').value = rulesMap['links'].action || 'warn';
+            document.getElementById('rule-links-discord').checked = rulesMap['links'].config?.discord || false;
+            document.getElementById('rule-links-all').checked = rulesMap['links'].config?.all || false;
+        }
+        
+        // Load caps rule
+        if (rulesMap['caps']) {
+            document.getElementById('rule-caps-enabled').checked = rulesMap['caps'].enabled;
+            document.getElementById('rule-caps-threshold').value = rulesMap['caps'].threshold || 70;
+            document.getElementById('rule-caps-action').value = rulesMap['caps'].action || 'warn';
+        }
+        
+        // Load recent violations
+        loadAutoModViolations();
+    } catch (err) {
+        console.error('Error loading auto-mod rules:', err);
+    }
+}
+
+async function saveAutoModRules() {
+    try {
+        const guildId = document.getElementById('guild-select').value;
+        if (!guildId) {
+            alert('Please select a server first');
+            return;
+        }
+        
+        const rules = [
+            {
+                rule_type: 'spam',
+                enabled: document.getElementById('rule-spam-enabled').checked,
+                threshold: parseInt(document.getElementById('rule-spam-threshold').value),
+                action: document.getElementById('rule-spam-action').value,
+                config: {}
+            },
+            {
+                rule_type: 'bad_words',
+                enabled: document.getElementById('rule-badwords-enabled').checked,
+                action: document.getElementById('rule-badwords-action').value,
+                threshold: 0,
+                config: {
+                    words: document.getElementById('rule-badwords-config').value
+                        .split(',')
+                        .map(w => w.trim())
+                        .filter(w => w.length > 0)
+                }
+            },
+            {
+                rule_type: 'links',
+                enabled: document.getElementById('rule-links-enabled').checked,
+                action: document.getElementById('rule-links-action').value,
+                threshold: 0,
+                config: {
+                    discord: document.getElementById('rule-links-discord').checked,
+                    all: document.getElementById('rule-links-all').checked
+                }
+            },
+            {
+                rule_type: 'caps',
+                enabled: document.getElementById('rule-caps-enabled').checked,
+                threshold: parseInt(document.getElementById('rule-caps-threshold').value),
+                action: document.getElementById('rule-caps-action').value,
+                config: {}
+            }
+        ];
+        
+        for (const rule of rules) {
+            const response = await fetch('/dashboard/api/automod/rules', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ guild_id: guildId, ...rule })
+            });
+            
+            if (!response.ok) throw new Error(`Failed to save ${rule.rule_type} rule`);
+        }
+        
+        alert('✅ Auto-mod rules saved successfully!');
+        loadAutoModViolations();
+    } catch (err) {
+        console.error('Error saving auto-mod rules:', err);
+        alert('❌ Failed to save rules: ' + err.message);
+    }
+}
+
+async function loadAutoModViolations() {
+    try {
+        const guildId = document.getElementById('guild-select').value;
+        const violations = await apiRequest(`/dashboard/api/automod/violations?guild_id=${guildId}&limit=10`);
+        
+        const violationsDiv = document.getElementById('automod-violations');
+        
+        if (violations.length === 0) {
+            violationsDiv.innerHTML = '<p style="color: #99aab5;">No violations recorded yet</p>';
+            return;
+        }
+        
+        violationsDiv.innerHTML = violations.map(v => `
+            <div style="background: #2c2f33; padding: 0.75rem; border-radius: 4px; margin-bottom: 0.5rem; border-left: 3px solid #f04747;">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.25rem;">
+                    <strong style="color: #f04747;">${v.rule_type.toUpperCase()}</strong>
+                    <span style="color: #99aab5; font-size: 0.85rem;">${new Date(v.timestamp).toLocaleString()}</span>
+                </div>
+                <div style="color: #99aab5; font-size: 0.9rem;">
+                    <div>User: <code>${v.user_id}</code></div>
+                    <div>Action: <span style="color: #faa61a;">${v.action_taken}</span></div>
+                    ${v.content ? `<div style="margin-top: 0.25rem; font-style: italic; opacity: 0.8;">"${v.content.substring(0, 100)}${v.content.length > 100 ? '...' : ''}"</div>` : ''}
+                </div>
+            </div>
+        `).join('');
+    } catch (err) {
+        console.error('Error loading violations:', err);
     }
 }
 

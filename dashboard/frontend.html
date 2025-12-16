@@ -290,6 +290,130 @@
                     </button>
                 </div>
                 
+                <!-- Auto-Moderation Rules -->
+                <div class="card" style="margin-top: 1rem;">
+                    <h3>🛡️ Auto-Moderation Rules</h3>
+                    <p style="color: #99aab5; margin-bottom: 1rem;">Configure automatic moderation rules</p>
+                    
+                    <!-- Spam Detection -->
+                    <div class="automod-rule">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="rule-spam-enabled">
+                                <strong>🚫 Spam Detection</strong>
+                            </label>
+                        </div>
+                        <div style="margin-left: 1.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div>
+                                <label style="display: block; margin-bottom: 0.25rem; color: #99aab5; font-size: 0.9rem;">Messages per 10 seconds</label>
+                                <input type="number" id="rule-spam-threshold" min="3" max="20" value="5" style="width: 100%; padding: 0.4rem; background: #2c2f33; border: 1px solid #40444b; color: white; border-radius: 4px;">
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 0.25rem; color: #99aab5; font-size: 0.9rem;">Action</label>
+                                <select id="rule-spam-action" style="width: 100%; padding: 0.4rem; background: #2c2f33; border: 1px solid #40444b; color: white; border-radius: 4px;">
+                                    <option value="warn">Warn</option>
+                                    <option value="delete">Delete</option>
+                                    <option value="timeout">Timeout (5min)</option>
+                                    <option value="kick">Kick</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Bad Words Filter -->
+                    <div class="automod-rule" style="margin-top: 1rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="rule-badwords-enabled">
+                                <strong>🤬 Bad Words Filter</strong>
+                            </label>
+                        </div>
+                        <div style="margin-left: 1.5rem;">
+                            <div style="margin-bottom: 0.5rem;">
+                                <label style="display: block; margin-bottom: 0.25rem; color: #99aab5; font-size: 0.9rem;">Blocked Words (comma separated)</label>
+                                <textarea id="rule-badwords-config" rows="2" placeholder="word1, word2, word3" style="width: 100%; padding: 0.4rem; background: #2c2f33; border: 1px solid #40444b; color: white; border-radius: 4px; resize: vertical;"></textarea>
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 0.25rem; color: #99aab5; font-size: 0.9rem;">Action</label>
+                                <select id="rule-badwords-action" style="width: 100%; padding: 0.4rem; background: #2c2f33; border: 1px solid #40444b; color: white; border-radius: 4px;">
+                                    <option value="warn">Warn</option>
+                                    <option value="delete">Delete</option>
+                                    <option value="timeout">Timeout (5min)</option>
+                                    <option value="kick">Kick</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Link Blocking -->
+                    <div class="automod-rule" style="margin-top: 1rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="rule-links-enabled">
+                                <strong>🔗 Link Blocking</strong>
+                            </label>
+                        </div>
+                        <div style="margin-left: 1.5rem;">
+                            <div style="margin-bottom: 0.5rem;">
+                                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem;">
+                                    <input type="checkbox" id="rule-links-discord">
+                                    <span style="color: #99aab5;">Block Discord invites</span>
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem; margin-top: 0.25rem;">
+                                    <input type="checkbox" id="rule-links-all">
+                                    <span style="color: #99aab5;">Block all links</span>
+                                </label>
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 0.25rem; color: #99aab5; font-size: 0.9rem;">Action</label>
+                                <select id="rule-links-action" style="width: 100%; padding: 0.4rem; background: #2c2f33; border: 1px solid #40444b; color: white; border-radius: 4px;">
+                                    <option value="warn">Warn</option>
+                                    <option value="delete">Delete</option>
+                                    <option value="timeout">Timeout (5min)</option>
+                                    <option value="kick">Kick</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Caps Lock Detection -->
+                    <div class="automod-rule" style="margin-top: 1rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="rule-caps-enabled">
+                                <strong>🔠 Excessive Caps</strong>
+                            </label>
+                        </div>
+                        <div style="margin-left: 1.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div>
+                                <label style="display: block; margin-bottom: 0.25rem; color: #99aab5; font-size: 0.9rem;">Caps % threshold</label>
+                                <input type="number" id="rule-caps-threshold" min="50" max="100" value="70" style="width: 100%; padding: 0.4rem; background: #2c2f33; border: 1px solid #40444b; color: white; border-radius: 4px;">
+                            </div>
+                            <div>
+                                <label style="display: block; margin-bottom: 0.25rem; color: #99aab5; font-size: 0.9rem;">Action</label>
+                                <select id="rule-caps-action" style="width: 100%; padding: 0.4rem; background: #2c2f33; border: 1px solid #40444b; color: white; border-radius: 4px;">
+                                    <option value="warn">Warn</option>
+                                    <option value="delete">Delete</option>
+                                    <option value="timeout">Timeout (5min)</option>
+                                    <option value="kick">Kick</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button onclick="saveAutoModRules()" class="btn" style="margin-top: 1rem; background: #f04747;">
+                        🛡️ Save Auto-Mod Rules
+                    </button>
+                    
+                    <!-- Recent Violations -->
+                    <div style="margin-top: 1.5rem; border-top: 1px solid #40444b; padding-top: 1rem;">
+                        <h4 style="margin-bottom: 0.5rem;">Recent Violations</h4>
+                        <div id="automod-violations" style="max-height: 200px; overflow-y: auto;">
+                            <p style="color: #99aab5;">Loading...</p>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Backup & Restore -->
                 <div class="card" style="margin-top: 1rem;">
                     <h3>💾 Backup & Restore</h3>

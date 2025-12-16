@@ -299,12 +299,20 @@ async function getRules(guildId) {
 
 // API: Add/update rule
 async function setRule(guildId, ruleType, enabled, action, threshold, config) {
-    await db.query(`
-        INSERT INTO automod_rules (guild_id, rule_type, enabled, action, threshold, config)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT ON CONSTRAINT automod_rules_pkey
-        DO UPDATE SET enabled = $3, action = $4, threshold = $5, config = $6
+    // First, try to update
+    const result = await db.query(`
+        UPDATE automod_rules 
+        SET enabled = $3, action = $4, threshold = $5, config = $6
+        WHERE guild_id = $1 AND rule_type = $2
     `, [guildId, ruleType, enabled, action, threshold, JSON.stringify(config)]);
+    
+    // If no rows updated, insert new
+    if (result.rowCount === 0) {
+        await db.query(`
+            INSERT INTO automod_rules (guild_id, rule_type, enabled, action, threshold, config)
+            VALUES ($1, $2, $3, $4, $5, $6)
+        `, [guildId, ruleType, enabled, action, threshold, JSON.stringify(config)]);
+    }
 }
 
 // API: Get violations
