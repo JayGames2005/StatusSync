@@ -1372,7 +1372,7 @@ app.listen(PORT, () => {
 
         if (commandName === 'grantpremium') {
             // Bot owner only
-            const botOwnerId = '781269165165346867';
+            const botOwnerId = '1432443011488288890';
             if (interaction.user.id !== botOwnerId) {
                 await interaction.reply({ content: '❌ This command can only be used by the bot owner.', flags: 64 });
                 return;
