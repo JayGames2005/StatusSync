@@ -215,28 +215,112 @@ async function fetchStats() {
 // Settings
 async function fetchSettings() {
     try {
+        const guildId = document.getElementById('guild-select').value;
+        if (!guildId) return;
+        
+        // Load channels for dropdowns
+        await loadChannels();
+        
         const settings = await apiRequest('settings');
         
-        document.getElementById('setting-welcome').textContent = 
-            settings.welcome?.channel_id ? `Channel ID: ${settings.welcome.channel_id}` : 'Not configured';
-        
-        document.getElementById('setting-modlog').textContent = 
-            settings.modlog?.channel_id ? `Channel ID: ${settings.modlog.channel_id}` : 'Not configured';
-        
-        document.getElementById('setting-logging').textContent = 
-            settings.logging?.channel_id ? `Channel ID: ${settings.logging.channel_id}` : 'Not configured';
-        
-        if (settings.starboard) {
-            document.getElementById('setting-starboard').innerHTML = `
-                <p>Channel: ${settings.starboard.channel_id || 'Not set'}</p>
-                <p>Emoji: ${settings.starboard.emoji || '⭐'}</p>
-                <p>Threshold: ${settings.starboard.threshold || 3} reactions</p>
-            `;
-        } else {
-            document.getElementById('setting-starboard').textContent = 'Not configured';
+        // Set selected channels
+        if (settings.welcome?.channel_id) {
+            document.getElementById('welcome-channel').value = settings.welcome.channel_id;
+        }
+        if (settings.modlog?.channel_id) {
+            document.getElementById('modlog-channel').value = settings.modlog.channel_id;
+        }
+        if (settings.logging?.channel_id) {
+            document.getElementById('logging-channel').value = settings.logging.channel_id;
+        }
+        if (settings.starboard?.channel_id) {
+            document.getElementById('starboard-channel').value = settings.starboard.channel_id;
+            document.getElementById('starboard-emoji').value = settings.starboard.emoji || '⭐';
+            document.getElementById('starboard-threshold').value = settings.starboard.threshold || 3;
         }
     } catch (err) {
         console.error('Error fetching settings:', err);
+    }
+}
+
+async function loadChannels() {
+    try {
+        const guildId = document.getElementById('guild-select').value;
+        const channels = await apiRequest(`channels`);
+        
+        const selects = ['welcome-channel', 'modlog-channel', 'logging-channel', 'starboard-channel'];
+        selects.forEach(selectId => {
+            const select = document.getElementById(selectId);
+            const currentValue = select.value;
+            select.innerHTML = '<option value="">Not configured</option>';
+            
+            channels.forEach(channel => {
+                if (channel.type === 0) { // Text channels only
+                    const option = document.createElement('option');
+                    option.value = channel.id;
+                    option.textContent = `# ${channel.name}`;
+                    select.appendChild(option);
+                }
+            });
+            
+            if (currentValue) select.value = currentValue;
+        });
+    } catch (err) {
+        console.error('Error loading channels:', err);
+    }
+}
+
+async function saveChannelSetting(type) {
+    try {
+        const guildId = document.getElementById('guild-select').value;
+        if (!guildId) {
+            alert('Please select a server first');
+            return;
+        }
+        
+        const channelId = document.getElementById(`${type}-channel`).value;
+        
+        const response = await fetch(`/dashboard/api/settings/${type}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ guild_id: guildId, channel_id: channelId })
+        });
+        
+        if (!response.ok) throw new Error('Failed to save setting');
+        
+        alert(`✅ ${type.charAt(0).toUpperCase() + type.slice(1)} channel ${channelId ? 'updated' : 'cleared'}!`);
+    } catch (err) {
+        console.error('Error saving setting:', err);
+        alert('❌ Failed to save setting: ' + err.message);
+    }
+}
+
+async function saveStarboardSettings() {
+    try {
+        const guildId = document.getElementById('guild-select').value;
+        if (!guildId) {
+            alert('Please select a server first');
+            return;
+        }
+        
+        const channelId = document.getElementById('starboard-channel').value;
+        const emoji = document.getElementById('starboard-emoji').value;
+        const threshold = parseInt(document.getElementById('starboard-threshold').value);
+        
+        const response = await fetch('/dashboard/api/settings/starboard', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ guild_id: guildId, channel_id: channelId, emoji, threshold })
+        });
+        
+        if (!response.ok) throw new Error('Failed to save starboard settings');
+        
+        alert('✅ Starboard settings saved!');
+    } catch (err) {
+        console.error('Error saving starboard:', err);
+        alert('❌ Failed to save settings: ' + err.message);
     }
 }
 

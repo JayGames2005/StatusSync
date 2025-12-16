@@ -400,6 +400,26 @@ tr:hover {
     margin-top: 10px;
 }
 
+.channel-select {
+    width: 100%;
+    padding: 0.5rem;
+    background: #2c2f33;
+    border: 1px solid #40444b;
+    color: white;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+.channel-select:hover {
+    border-color: #5865F2;
+}
+
+.channel-select option {
+    background: #2c2f33;
+    color: white;
+}
+
 /* Chart */
 .chart-bar {
     margin-bottom: 15px;

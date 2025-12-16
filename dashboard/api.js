@@ -139,6 +139,138 @@ router.get('/settings', authMiddleware,  requireGuildId, async (req, res) => {
     }
 });
 
+// Get channels for a guild
+router.get('/channels', authMiddleware, requireGuildId, async (req, res) => {
+    try {
+        const { guild_id } = req.query;
+        
+        if (!client || !client.isReady()) {
+            return res.status(503).json({ error: 'Bot is not ready' });
+        }
+        
+        const guild = client.guilds.cache.get(guild_id);
+        if (!guild) {
+            return res.status(404).json({ error: 'Guild not found' });
+        }
+        
+        const channels = guild.channels.cache
+            .filter(ch => ch.type === 0) // Text channels
+            .map(ch => ({
+                id: ch.id,
+                name: ch.name,
+                type: ch.type
+            }));
+        
+        res.json(channels);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update welcome channel
+router.post('/settings/welcome', authMiddleware, async (req, res) => {
+    try {
+        const { guild_id, channel_id } = req.body;
+        if (!guild_id) return res.status(400).json({ error: 'guild_id required' });
+        
+        await db.query(`CREATE TABLE IF NOT EXISTS welcome_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+        
+        if (channel_id) {
+            await db.query(
+                `INSERT INTO welcome_channels (guild_id, channel_id) VALUES ($1, $2) 
+                 ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2`,
+                [guild_id, channel_id]
+            );
+        } else {
+            await db.query('DELETE FROM welcome_channels WHERE guild_id = $1', [guild_id]);
+        }
+        
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update modlog channel
+router.post('/settings/modlog', authMiddleware, async (req, res) => {
+    try {
+        const { guild_id, channel_id } = req.body;
+        if (!guild_id) return res.status(400).json({ error: 'guild_id required' });
+        
+        await db.query(`CREATE TABLE IF NOT EXISTS mod_log_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+        
+        if (channel_id) {
+            await db.query(
+                `INSERT INTO mod_log_channels (guild_id, channel_id) VALUES ($1, $2) 
+                 ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2`,
+                [guild_id, channel_id]
+            );
+        } else {
+            await db.query('DELETE FROM mod_log_channels WHERE guild_id = $1', [guild_id]);
+        }
+        
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update logging channel
+router.post('/settings/logging', authMiddleware, async (req, res) => {
+    try {
+        const { guild_id, channel_id } = req.body;
+        if (!guild_id) return res.status(400).json({ error: 'guild_id required' });
+        
+        await db.query(`CREATE TABLE IF NOT EXISTS logging_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+        
+        if (channel_id) {
+            await db.query(
+                `INSERT INTO logging_channels (guild_id, channel_id) VALUES ($1, $2) 
+                 ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2`,
+                [guild_id, channel_id]
+            );
+        } else {
+            await db.query('DELETE FROM logging_channels WHERE guild_id = $1', [guild_id]);
+        }
+        
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update starboard settings
+router.post('/settings/starboard', authMiddleware, async (req, res) => {
+    try {
+        const { guild_id, channel_id, emoji, threshold } = req.body;
+        if (!guild_id) return res.status(400).json({ error: 'guild_id required' });
+        
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS starboard_settings (
+                guild_id VARCHAR(32) PRIMARY KEY, 
+                channel_id VARCHAR(32),
+                emoji VARCHAR(32) DEFAULT '⭐',
+                threshold INT DEFAULT 3
+            )
+        `);
+        
+        if (channel_id) {
+            await db.query(
+                `INSERT INTO starboard_settings (guild_id, channel_id, emoji, threshold) 
+                 VALUES ($1, $2, $3, $4) 
+                 ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2, emoji = $3, threshold = $4`,
+                [guild_id, channel_id, emoji || '⭐', threshold || 3]
+            );
+        } else {
+            await db.query('DELETE FROM starboard_settings WHERE guild_id = $1', [guild_id]);
+        }
+        
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // === STATISTICS ===
 router.get('/stats', authMiddleware,  requireGuildId, async (req, res) => {
     try {

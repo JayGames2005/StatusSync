@@ -2378,6 +2378,74 @@ app.listen(PORT, () => {
         }
     });
 
+    // === ROLE CHANGE LOGGING ===
+    client.on('guildMemberUpdate', async (oldMember, newMember) => {
+        try {
+            // Check for role changes
+            const addedRoles = newMember.roles.cache.filter(role => !oldMember.roles.cache.has(role.id));
+            const removedRoles = oldMember.roles.cache.filter(role => !newMember.roles.cache.has(role.id));
+            
+            if (addedRoles.size === 0 && removedRoles.size === 0) return;
+            
+            // Get logging channel
+            await db.query(`CREATE TABLE IF NOT EXISTS logging_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+            const logRes = await db.query('SELECT channel_id FROM logging_channels WHERE guild_id = $1', [newMember.guild.id]);
+            if (!logRes.rows.length) return;
+            
+            const logChannel = newMember.guild.channels.cache.get(logRes.rows[0].channel_id);
+            if (!logChannel || !logChannel.isTextBased()) return;
+            
+            // Fetch audit logs to see who made the change
+            const auditLogs = await newMember.guild.fetchAuditLogs({ limit: 1, type: 25 }).catch(() => null); // MEMBER_ROLE_UPDATE
+            const roleLog = auditLogs?.entries.first();
+            const moderator = roleLog && Date.now() - roleLog.createdTimestamp < 5000 ? roleLog.executor : null;
+            
+            // Log added roles
+            if (addedRoles.size > 0) {
+                const embed = {
+                    color: 0x2ecc71,
+                    title: '📝 Roles Added',
+                    thumbnail: { url: newMember.user.displayAvatarURL() || newMember.user.avatarURL },
+                    fields: [
+                        { name: 'User', value: `<@${newMember.id}>`, inline: true },
+                        { name: 'User Tag', value: newMember.user.tag, inline: true },
+                        { name: 'Added Roles', value: addedRoles.map(r => `<@&${r.id}>`).join(', '), inline: false }
+                    ],
+                    timestamp: new Date()
+                };
+                
+                if (moderator) {
+                    embed.fields.push({ name: 'Added By', value: `<@${moderator.id}>`, inline: true });
+                }
+                
+                await logChannel.send({ embeds: [embed] });
+            }
+            
+            // Log removed roles
+            if (removedRoles.size > 0) {
+                const embed = {
+                    color: 0xe74c3c,
+                    title: '📝 Roles Removed',
+                    thumbnail: { url: newMember.user.displayAvatarURL() || newMember.user.avatarURL },
+                    fields: [
+                        { name: 'User', value: `<@${newMember.id}>`, inline: true },
+                        { name: 'User Tag', value: newMember.user.tag, inline: true },
+                        { name: 'Removed Roles', value: removedRoles.map(r => `<@&${r.id}>`).join(', '), inline: false }
+                    ],
+                    timestamp: new Date()
+                };
+                
+                if (moderator) {
+                    embed.fields.push({ name: 'Removed By', value: `<@${moderator.id}>`, inline: true });
+                }
+                
+                await logChannel.send({ embeds: [embed] });
+            }
+        } catch (err) {
+            console.error('Error logging role changes:', err);
+        }
+    });
+
     // === MODERATION EVENT LOGGING (External kicks) ===
     // Note: guildMemberRemove for leaves and kicks is already handled above with logging channel
 

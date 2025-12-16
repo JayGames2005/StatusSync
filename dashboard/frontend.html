@@ -152,30 +152,56 @@
 
         <!-- Settings Tab -->
         <div id="tab-settings" class="tab-content">
-            <h2>Server Configuration</h2>
+            <h2>⚙️ Server Configuration</h2>
             
             <div class="grid">
                 <div class="card">
                     <h3>👋 Welcome Channel</h3>
-                    <p id="setting-welcome" class="setting-value">Not configured</p>
+                    <select id="welcome-channel" class="channel-select">
+                        <option value="">Not configured</option>
+                    </select>
+                    <button onclick="saveChannelSetting('welcome')" class="btn" style="margin-top: 0.5rem; background: #3ba55d;">💾 Save</button>
                 </div>
                 <div class="card">
                     <h3>⚖️ Mod Log Channel</h3>
-                    <p id="setting-modlog" class="setting-value">Not configured</p>
+                    <select id="modlog-channel" class="channel-select">
+                        <option value="">Not configured</option>
+                    </select>
+                    <button onclick="saveChannelSetting('modlog')" class="btn" style="margin-top: 0.5rem; background: #3ba55d;">💾 Save</button>
                 </div>
                 <div class="card">
                     <h3>📝 Logging Channel</h3>
-                    <p id="setting-logging" class="setting-value">Not configured</p>
+                    <select id="logging-channel" class="channel-select">
+                        <option value="">Not configured</option>
+                    </select>
+                    <button onclick="saveChannelSetting('logging')" class="btn" style="margin-top: 0.5rem; background: #3ba55d;">💾 Save</button>
                 </div>
                 <div class="card">
-                    <h3>⭐ Starboard Settings</h3>
-                    <div id="setting-starboard" class="setting-value">Not configured</div>
+                    <h3>⭐ Starboard Channel</h3>
+                    <select id="starboard-channel" class="channel-select">
+                        <option value="">Not configured</option>
+                    </select>
+                    <button onclick="saveChannelSetting('starboard')" class="btn" style="margin-top: 0.5rem; background: #3ba55d;">💾 Save</button>
                 </div>
             </div>
 
-            <div class="card">
-                <h3>🔧 Custom Commands</h3>
-                <div id="commands-list" class="list"></div>
+            <div class="card" style="margin-top: 1rem;">
+                <h3>⭐ Starboard Settings</h3>
+                <div style="margin: 1rem 0;">
+                    <label style="display: block; margin-bottom: 0.5rem;">
+                        <strong>Emoji</strong>
+                        <input type="text" id="starboard-emoji" placeholder="⭐" value="⭐"
+                               style="width: 100%; padding: 0.5rem; margin-top: 0.25rem; background: #2c2f33; border: 1px solid #40444b; color: white; border-radius: 4px;">
+                    </label>
+                </div>
+                <div style="margin: 1rem 0;">
+                    <label style="display: block; margin-bottom: 0.5rem;">
+                        <strong>Threshold (reactions needed)</strong>
+                        <input type="number" id="starboard-threshold" min="1" max="50" value="3"
+                               style="width: 100%; padding: 0.5rem; margin-top: 0.25rem; background: #2c2f33; border: 1px solid #40444b; color: white; border-radius: 4px;">
+                    </label>
+                </div>
+                <button onclick="saveStarboardSettings()" class="btn" style="background: #f1c40f;">⭐ Save Starboard</button>
             </div>
         </div>
 
