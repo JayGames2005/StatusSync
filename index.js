@@ -190,8 +190,7 @@ const commands = [
         .setDescription('Check your server\'s premium status'),
     new SlashCommandBuilder()
         .setName('grantpremium')
-        .setDescription('Grant premium to a server (bot owner only)')
-        .addStringOption(option => option.setName('guild_id').setDescription('Server ID').setRequired(true))
+        .setDescription('Grant premium to this server (bot owner only)')
         .addStringOption(option => 
             option.setName('tier')
                 .setDescription('Premium tier')
@@ -1373,13 +1372,13 @@ app.listen(PORT, () => {
 
         if (commandName === 'grantpremium') {
             // Bot owner only
-            const botOwnerId = '781269165165346867'; // Replace with your Discord user ID
+            const botOwnerId = '781269165165346867';
             if (interaction.user.id !== botOwnerId) {
                 await interaction.reply({ content: '❌ This command can only be used by the bot owner.', flags: 64 });
                 return;
             }
             
-            const guildId = interaction.options.getString('guild_id');
+            const guildId = interaction.guild.id;
             const tier = interaction.options.getString('tier');
             
             try {
@@ -1410,7 +1409,7 @@ app.listen(PORT, () => {
                 };
                 
                 await interaction.reply({ 
-                    content: `✅ Successfully granted **${tierNames[tier]}** to server \`${guildId}\`!`, 
+                    content: `✅ Successfully granted **${tierNames[tier]}** to this server!`, 
                     flags: 64 
                 });
             } catch (err) {
