@@ -290,6 +290,7 @@ async function checkMessage(message, isPremium) {
 
 // API: Get rules for a guild
 async function getRules(guildId) {
+    await ensureAutoModTables();
     const result = await db.query(
         'SELECT * FROM automod_rules WHERE guild_id = $1 ORDER BY id',
         [guildId]
@@ -299,6 +300,8 @@ async function getRules(guildId) {
 
 // API: Add/update rule
 async function setRule(guildId, ruleType, enabled, action, threshold, config) {
+    await ensureAutoModTables();
+    
     // First, try to update
     const result = await db.query(`
         UPDATE automod_rules 
@@ -317,6 +320,7 @@ async function setRule(guildId, ruleType, enabled, action, threshold, config) {
 
 // API: Get violations
 async function getViolations(guildId, limit = 50) {
+    await ensureAutoModTables();
     const result = await db.query(
         `SELECT * FROM automod_violations 
          WHERE guild_id = $1 
