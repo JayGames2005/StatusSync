@@ -162,6 +162,12 @@ const commands = [
         .addIntegerOption(option => option.setName('case_id').setDescription('Case ID to view').setRequired(true))
         .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
     new SlashCommandBuilder()
+        .setName('closecase')
+        .setDescription('Close/resolve a moderation case')
+        .addIntegerOption(option => option.setName('case_id').setDescription('Case ID to close').setRequired(true))
+        .addStringOption(option => option.setName('reason').setDescription('Reason for closing').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+    new SlashCommandBuilder()
         .setName('cases')
         .setDescription('View all moderation cases for a user')
         .addUserOption(option => option.setName('user').setDescription('User to view cases for').setRequired(true))
@@ -1091,8 +1097,8 @@ app.listen(PORT, () => {
                 const moderator = await client.users.fetch(modCase.moderator_id).catch(() => ({ tag: 'Unknown Moderator', id: modCase.moderator_id }));
                 
                 const embed = {
-                    color: 0x3498db,
-                    title: `Case #${caseId}`,
+                    color: modCase.status === 'closed' ? 0x2ecc71 : 0x3498db,
+                    title: `Case #${caseId} ${modCase.status === 'closed' ? '(Closed)' : ''}`,
                     fields: [
                         { name: 'User', value: `<@${user.id}> (${user.tag})`, inline: true },
                         { name: 'Moderator', value: `<@${moderator.id}>`, inline: true },
@@ -1108,10 +1114,93 @@ app.listen(PORT, () => {
                     embed.fields.push({ name: 'Expires', value: new Date(modCase.expires_at).toLocaleString(), inline: true });
                 }
                 
+                // Add close info if closed
+                if (modCase.status === 'closed' && modCase.closed_at) {
+                    embed.fields.push({ name: 'Closed At', value: new Date(modCase.closed_at).toLocaleString(), inline: true });
+                    if (modCase.closed_by) {
+                        embed.fields.push({ name: 'Closed By', value: `<@${modCase.closed_by}>`, inline: true });
+                    }
+                    if (modCase.close_reason) {
+                        embed.fields.push({ name: 'Close Reason', value: modCase.close_reason, inline: false });
+                    }
+                }
+                
                 await interaction.reply({ embeds: [embed], flags: 64 });
             } catch (err) {
                 console.error(err);
                 await interaction.reply({ content: 'Error fetching case: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'closecase') {
+            const caseId = interaction.options.getInteger('case_id');
+            const reason = interaction.options.getString('reason') || 'No reason provided';
+            
+            try {
+                // Check if case exists
+                const res = await db.query(
+                    'SELECT * FROM mod_cases WHERE case_id = $1 AND guild_id = $2',
+                    [caseId, interaction.guild.id]
+                );
+                
+                if (!res.rows.length) {
+                    await interaction.reply({ content: 'Case not found.', flags: 64 });
+                    return;
+                }
+                
+                const modCase = res.rows[0];
+                
+                // Check if already closed
+                if (modCase.status === 'closed') {
+                    await interaction.reply({ content: `Case #${caseId} is already closed.`, flags: 64 });
+                    return;
+                }
+                
+                // Update case to closed
+                await db.query(
+                    'UPDATE mod_cases SET status = $1, closed_at = NOW(), closed_by = $2, close_reason = $3 WHERE case_id = $4 AND guild_id = $5',
+                    ['closed', interaction.user.id, reason, caseId, interaction.guild.id]
+                );
+                
+                const embed = {
+                    color: 0x2ecc71,
+                    title: '✅ Case Closed',
+                    description: `Case #${caseId} has been closed.`,
+                    fields: [
+                        { name: 'Closed By', value: `<@${interaction.user.id}>`, inline: true },
+                        { name: 'Reason', value: reason, inline: false }
+                    ],
+                    timestamp: new Date()
+                };
+                
+                await interaction.reply({ embeds: [embed] });
+                
+                // Log to mod log channel if configured
+                await db.query(`CREATE TABLE IF NOT EXISTS mod_log_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+                const logRes = await db.query('SELECT channel_id FROM mod_log_channels WHERE guild_id = $1', [interaction.guild.id]);
+                if (logRes.rows.length) {
+                    const logChannel = interaction.guild.channels.cache.get(logRes.rows[0].channel_id);
+                    if (logChannel && logChannel.isTextBased()) {
+                        const user = await client.users.fetch(modCase.user_id).catch(() => ({ tag: 'Unknown User', id: modCase.user_id }));
+                        const logEmbed = {
+                            color: 0x2ecc71,
+                            title: '📋 Case Closed',
+                            fields: [
+                                { name: 'Case ID', value: `#${caseId}`, inline: true },
+                                { name: 'User', value: `<@${user.id}>`, inline: true },
+                                { name: 'Original Action', value: modCase.action, inline: true },
+                                { name: 'Closed By', value: `<@${interaction.user.id}>`, inline: true },
+                                { name: 'Close Reason', value: reason, inline: false }
+                            ],
+                            timestamp: new Date()
+                        };
+                        await logChannel.send({ embeds: [logEmbed] });
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: 'Error closing case: ' + err.message, flags: 64 });
             }
             return;
         }
@@ -1531,6 +1620,9 @@ app.listen(PORT, () => {
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         expires_at TIMESTAMP,
                         status VARCHAR(16) DEFAULT 'open', -- open, closed
+                        closed_at TIMESTAMP,
+                        closed_by VARCHAR(32),
+                        close_reason TEXT,
                         guild_id VARCHAR(32) NOT NULL
                     );
                 `);
