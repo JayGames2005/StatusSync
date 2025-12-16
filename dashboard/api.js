@@ -506,13 +506,17 @@ router.get('/automod/rules', authMiddleware, requireGuildId, async (req, res) =>
     }
 });
 
-router.post('/automod/rules', authMiddleware, requireGuildId, async (req, res) => {
+router.post('/automod/rules', authMiddleware, async (req, res) => {
     try {
         const { guild_id, rule_type, enabled, action, threshold, config } = req.body;
+        if (!guild_id) {
+            return res.status(400).json({ error: 'guild_id is required' });
+        }
         const automod = require('../automod');
         await automod.setRule(guild_id, rule_type, enabled, action, threshold, config || {});
         res.json({ success: true });
     } catch (err) {
+        console.error('Error saving automod rule:', err);
         res.status(500).json({ error: err.message });
     }
 });
