@@ -86,6 +86,33 @@ async function ensurePremiumTables() {
 
 ensurePremiumTables();
 
+// ADMIN ONLY: Grant premium to a server (for testing)
+router.post('/grant', async (req, res) => {
+    try {
+        const { guild_id, tier, admin_key } = req.body;
+        
+        // Simple admin key check (you can change this)
+        if (admin_key !== process.env.ADMIN_KEY && admin_key !== 'test-premium-key-2025') {
+            return res.status(403).json({ error: 'Unauthorized' });
+        }
+        
+        if (!guild_id || !tier || !PREMIUM_TIERS[tier]) {
+            return res.status(400).json({ error: 'Invalid guild_id or tier' });
+        }
+        
+        await db.query(`
+            INSERT INTO premium_subscriptions (guild_id, tier, status, started_at) 
+            VALUES ($1, $2, 'active', CURRENT_TIMESTAMP) 
+            ON CONFLICT (guild_id) 
+            DO UPDATE SET tier = $2, status = 'active', started_at = CURRENT_TIMESTAMP
+        `, [guild_id, tier]);
+        
+        res.json({ success: true, message: `${tier} premium granted to ${guild_id}` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Get premium tiers
 router.get('/tiers', (req, res) => {
     const tiers = Object.entries(PREMIUM_TIERS).map(([id, tier]) => ({
