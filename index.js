@@ -2352,7 +2352,7 @@ app.listen(PORT, () => {
     });
 
     // === READY EVENT - Set Custom Bot Status ===
-    client.once('ready', async () => {
+    client.once('clientReady', async () => {
         console.log(`✅ Logged in as ${client.user.tag}`);
         
         // Apply custom bot status from first premium server
