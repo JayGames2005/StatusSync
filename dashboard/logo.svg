@@ -1,0 +1,23 @@
+<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer rounded square - blue gradient -->
+  <defs>
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#5B9DD9;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3B82C4;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="greenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#5FDAA8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3BA876;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Outer speech bubble -->
+  <rect x="10" y="10" width="70" height="60" rx="15" fill="url(#blueGrad)"/>
+  <polygon points="25,70 30,80 35,70" fill="url(#blueGrad)"/>
+  
+  <!-- Inner checkmark circle -->
+  <circle cx="45" cy="40" r="22" fill="url(#greenGrad)"/>
+  
+  <!-- Checkmark -->
+  <path d="M 37 40 L 42 45 L 53 34" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

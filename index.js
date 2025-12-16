@@ -838,9 +838,12 @@ app.listen(PORT, () => {
                 const channel = guild.channels.cache.get(res.rows[0].channel_id);
                 if (!channel || !channel.isTextBased()) return;
                 
+                const logoUrl = process.env.DASHBOARD_URL || process.env.CALLBACK_URL?.replace('/dashboard/auth/callback', '') || 'https://statussync-production.up.railway.app';
+                
                 const embed = {
                     color: action === 'warn' ? 0xffa500 : action === 'timeout' ? 0xff6b6b : action === 'kick' ? 0xff4757 : action === 'ban' ? 0xff0000 : 0x00ff00,
                     title: `Case #${caseId} | ${action.toUpperCase()}`,
+                    thumbnail: { url: `${logoUrl}/logo.svg` },
                     fields: [
                         { name: 'User', value: `<@${user.id}> (${user.tag})`, inline: true },
                         { name: 'Moderator', value: `<@${moderator.id}>`, inline: true },
@@ -1315,6 +1318,7 @@ app.listen(PORT, () => {
                 color: 0x5865F2,
                 title: '📊 StatusSync Dashboard',
                 description: 'Access the web dashboard to view stats, manage moderation, and configure settings.',
+                thumbnail: { url: `${dashboardUrl}/logo.svg` },
                 fields: [
                     { name: '🔗 Dashboard Link', value: `[Click here to open dashboard](${dashboardUrl}/dashboard/frontend.html)`, inline: false },
                     { name: '🔐 Login Required', value: 'You must have Administrator permissions in this server to access the dashboard.', inline: false }
@@ -1329,6 +1333,7 @@ app.listen(PORT, () => {
 
         if (commandName === 'premium') {
             const premiumData = await checkPremium(interaction.guild.id);
+            const logoUrl = process.env.DASHBOARD_URL || process.env.CALLBACK_URL?.replace('/dashboard/auth/callback', '') || 'https://statussync-production.up.railway.app';
             
             if (premiumData.premium) {
                 const tierNames = {
@@ -1341,6 +1346,7 @@ app.listen(PORT, () => {
                     color: 0x667eea,
                     title: '💎 Premium Status',
                     description: `This server has **${tierNames[premiumData.tier] || premiumData.tier}** active!`,
+                    thumbnail: { url: `${logoUrl}/logo.svg` },
                     fields: [
                         { name: '🎁 Features Unlocked', value: 'Access all premium features in `/dashboard`', inline: false },
                         { name: '⚙️ Manage Subscription', value: 'Use `/dashboard` to manage your premium features', inline: false }
@@ -1357,6 +1363,7 @@ app.listen(PORT, () => {
                     color: 0x5865F2,
                     title: '💎 Premium Status',
                     description: 'This server does not have an active premium subscription.',
+                    thumbnail: { url: `${logoUrl}/logo.svg` },
                     fields: [
                         { name: '✨ Premium Features', value: '• Custom bot status\n• XP multipliers\n• Custom embed colors\n• Auto-moderation rules\n• Custom welcome images\n• Detailed analytics\n• Priority support\n• And more!', inline: false },
                         { name: '🚀 Upgrade Now', value: `[Visit the dashboard](${dashboardUrl}/dashboard/frontend.html) to view plans and upgrade!`, inline: false }

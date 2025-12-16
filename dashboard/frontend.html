@@ -4,13 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StatusSync Dashboard</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <!-- Header -->
     <header class="header">
         <div class="container">
-            <h1>📊 StatusSync Dashboard</h1>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <img src="logo.svg" alt="StatusSync" style="width: 50px; height: 50px;">
+                <h1>StatusSync Dashboard</h1>
+            </div>
             <div class="guild-selector" id="guild-selector" style="display: none;">
                 <label for="guild-select">Server:</label>
                 <select id="guild-select" onchange="selectGuild()">

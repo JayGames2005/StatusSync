@@ -17,6 +17,9 @@ app.use(session({
 
 // Static files
 app.use('/dashboard', express.static(path.join(__dirname)));
+app.get('/logo.svg', (req, res) => {
+    res.sendFile(path.join(__dirname, 'logo.svg'));
+});
 
 // API routes
 app.use('/dashboard/api', api);
