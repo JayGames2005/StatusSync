@@ -211,6 +211,55 @@ const commands = [
                     { name: 'Enterprise', value: 'enterprise' }
                 )
         ),
+    new SlashCommandBuilder()
+        .setName('history')
+        .setDescription('View detailed information about a user')
+        .addUserOption(option => option.setName('user').setDescription('User to view').setRequired(true))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+    new SlashCommandBuilder()
+        .setName('modstats')
+        .setDescription('View moderator activity statistics')
+        .addUserOption(option => option.setName('moderator').setDescription('Specific moderator (optional)').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+    new SlashCommandBuilder()
+        .setName('massban')
+        .setDescription('Ban multiple users at once')
+        .addStringOption(option => option.setName('user_ids').setDescription('User IDs separated by spaces or commas').setRequired(true))
+        .addStringOption(option => option.setName('reason').setDescription('Reason for bans').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
+    new SlashCommandBuilder()
+        .setName('massrole')
+        .setDescription('Add or remove a role from multiple users')
+        .addRoleOption(option => option.setName('role').setDescription('Role to manage').setRequired(true))
+        .addStringOption(option => 
+            option.setName('action')
+                .setDescription('Add or remove role')
+                .setRequired(true)
+                .addChoices(
+                    { name: 'Add', value: 'add' },
+                    { name: 'Remove', value: 'remove' }
+                ))
+        .addStringOption(option => option.setName('user_ids').setDescription('User IDs separated by spaces or commas').setRequired(true))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
+    new SlashCommandBuilder()
+        .setName('appeal')
+        .setDescription('Submit a ban appeal')
+        .addStringOption(option => option.setName('server_id').setDescription('Server ID you were banned from').setRequired(true))
+        .addStringOption(option => option.setName('reason').setDescription('Why should you be unbanned?').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('appeals')
+        .setDescription('View and manage ban appeals')
+        .addStringOption(option =>
+            option.setName('action')
+                .setDescription('Action to take')
+                .setRequired(false)
+                .addChoices(
+                    { name: 'View All', value: 'view' },
+                    { name: 'Approve', value: 'approve' },
+                    { name: 'Deny', value: 'deny' }
+                ))
+        .addIntegerOption(option => option.setName('appeal_id').setDescription('Appeal ID (for approve/deny)').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 ];
 
 async function registerSlashCommands() {
@@ -1446,6 +1495,421 @@ app.listen(PORT, () => {
             } catch (err) {
                 console.error('Error granting premium:', err);
                 await interaction.reply({ content: `❌ Failed to grant premium: ${err.message}`, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'history') {
+            const user = interaction.options.getUser('user');
+            
+            try {
+                const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+                
+                if (!member) {
+                    await interaction.reply({ content: '❌ User is not in this server.', flags: 64 });
+                    return;
+                }
+                
+                // Get user info
+                const accountAge = Math.floor((Date.now() - user.createdTimestamp) / (1000 * 60 * 60 * 24));
+                const memberAge = Math.floor((Date.now() - member.joinedTimestamp) / (1000 * 60 * 60 * 24));
+                
+                // Get mod cases
+                const casesRes = await db.query(
+                    'SELECT COUNT(*) as total FROM mod_cases WHERE user_id = $1 AND guild_id = $2',
+                    [user.id, interaction.guild.id]
+                );
+                const totalCases = casesRes.rows[0]?.total || 0;
+                
+                // Get XP/Rep
+                const xpRes = await db.query('SELECT xp FROM user_xp WHERE user_id = $1', [user.id]);
+                const xp = xpRes.rows[0]?.xp || 0;
+                const level = Math.floor(0.1 * Math.sqrt(xp));
+                
+                const repRes = await db.query('SELECT rep FROM user_rep WHERE user_id = $1', [user.id]);
+                const rep = repRes.rows[0]?.rep || 0;
+                
+                // Get roles
+                const roles = member.roles.cache
+                    .filter(r => r.id !== interaction.guild.id)
+                    .sort((a, b) => b.position - a.position)
+                    .map(r => `<@&${r.id}>`)
+                    .slice(0, 10)
+                    .join(', ') || 'None';
+                
+                const embed = {
+                    color: member.displayColor || 0x5865F2,
+                    title: `📋 User History: ${user.tag}`,
+                    thumbnail: { url: user.displayAvatarURL({ size: 256 }) },
+                    fields: [
+                        { name: '👤 User', value: `<@${user.id}>`, inline: true },
+                        { name: '🆔 ID', value: user.id, inline: true },
+                        { name: '📅 Account Created', value: `${accountAge} days ago`, inline: true },
+                        { name: '📥 Joined Server', value: `${memberAge} days ago`, inline: true },
+                        { name: '📊 Level / XP', value: `Level ${level} (${xp} XP)`, inline: true },
+                        { name: '⭐ Reputation', value: `${rep}`, inline: true },
+                        { name: '⚖️ Moderation Cases', value: `${totalCases}`, inline: true },
+                        { name: '👥 Roles', value: roles, inline: false }
+                    ],
+                    footer: { text: `Requested by ${interaction.user.tag}` },
+                    timestamp: new Date()
+                };
+                
+                await interaction.reply({ embeds: [embed], flags: 64 });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error fetching user history: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'modstats') {
+            const moderator = interaction.options.getUser('moderator');
+            
+            try {
+                let query = 'SELECT moderator_id, action, COUNT(*) as count FROM mod_cases WHERE guild_id = $1';
+                const params = [interaction.guild.id];
+                
+                if (moderator) {
+                    query += ' AND moderator_id = $2';
+                    params.push(moderator.id);
+                }
+                
+                query += ' GROUP BY moderator_id, action ORDER BY count DESC';
+                
+                const res = await db.query(query, params);
+                
+                if (!res.rows.length) {
+                    await interaction.reply({ content: '📊 No moderation activity found.', flags: 64 });
+                    return;
+                }
+                
+                // Aggregate by moderator
+                const modStats = {};
+                for (const row of res.rows) {
+                    if (!modStats[row.moderator_id]) {
+                        modStats[row.moderator_id] = { total: 0, actions: {} };
+                    }
+                    modStats[row.moderator_id].actions[row.action] = parseInt(row.count);
+                    modStats[row.moderator_id].total += parseInt(row.count);
+                }
+                
+                // Build description
+                let description = '';
+                const sortedMods = Object.entries(modStats).sort((a, b) => b[1].total - a[1].total);
+                
+                for (const [modId, stats] of sortedMods.slice(0, 10)) {
+                    const actionsStr = Object.entries(stats.actions)
+                        .map(([action, count]) => `${action}: ${count}`)
+                        .join(', ');
+                    description += `\n<@${modId}>: **${stats.total}** actions (${actionsStr})`;
+                }
+                
+                const title = moderator ? `📊 Moderation Stats for ${moderator.tag}` : '📊 Server Moderation Stats';
+                
+                const embed = {
+                    color: 0x3498db,
+                    title,
+                    description: description.trim() || 'No data',
+                    footer: { text: 'Showing top 10 moderators' },
+                    timestamp: new Date()
+                };
+                
+                await interaction.reply({ embeds: [embed], flags: 64 });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error fetching mod stats: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'massban') {
+            const userIdsStr = interaction.options.getString('user_ids');
+            const reason = interaction.options.getString('reason') || 'Mass ban';
+            
+            // Parse user IDs
+            const userIds = userIdsStr.split(/[,\s]+/).filter(id => id.match(/^\d{17,19}$/));
+            
+            if (userIds.length === 0) {
+                await interaction.reply({ content: '❌ No valid user IDs provided. Please provide user IDs separated by spaces or commas.', flags: 64 });
+                return;
+            }
+            
+            if (userIds.length > 50) {
+                await interaction.reply({ content: '❌ Maximum 50 users can be banned at once.', flags: 64 });
+                return;
+            }
+            
+            await interaction.deferReply({ flags: 64 });
+            
+            const results = { success: [], failed: [] };
+            
+            for (const userId of userIds) {
+                try {
+                    await interaction.guild.members.ban(userId, { reason: `${reason} | By: ${interaction.user.tag}` });
+                    const caseId = await logModAction(interaction.guild.id, userId, interaction.user.id, 'ban', reason);
+                    results.success.push(`<@${userId}> (Case #${caseId})`);
+                } catch (err) {
+                    results.failed.push(`<@${userId}> (${err.message})`);
+                }
+            }
+            
+            const embed = {
+                color: results.failed.length === 0 ? 0x2ecc71 : 0xe74c3c,
+                title: '🔨 Mass Ban Results',
+                fields: [
+                    { name: `✅ Successful (${results.success.length})`, value: results.success.join('\n') || 'None', inline: false },
+                    { name: `❌ Failed (${results.failed.length})`, value: results.failed.join('\n') || 'None', inline: false }
+                ],
+                footer: { text: `Executed by ${interaction.user.tag}` },
+                timestamp: new Date()
+            };
+            
+            await interaction.editReply({ embeds: [embed] });
+            return;
+        }
+
+        if (commandName === 'massrole') {
+            const role = interaction.options.getRole('role');
+            const action = interaction.options.getString('action');
+            const userIdsStr = interaction.options.getString('user_ids');
+            
+            // Parse user IDs
+            const userIds = userIdsStr.split(/[,\s]+/).filter(id => id.match(/^\d{17,19}$/));
+            
+            if (userIds.length === 0) {
+                await interaction.reply({ content: '❌ No valid user IDs provided.', flags: 64 });
+                return;
+            }
+            
+            if (userIds.length > 100) {
+                await interaction.reply({ content: '❌ Maximum 100 users at once.', flags: 64 });
+                return;
+            }
+            
+            // Check role hierarchy
+            if (role.position >= interaction.guild.members.me.roles.highest.position) {
+                await interaction.reply({ content: '❌ I cannot manage this role (role hierarchy).', flags: 64 });
+                return;
+            }
+            
+            await interaction.deferReply({ flags: 64 });
+            
+            const results = { success: [], failed: [] };
+            
+            for (const userId of userIds) {
+                try {
+                    const member = await interaction.guild.members.fetch(userId);
+                    if (action === 'add') {
+                        await member.roles.add(role);
+                    } else {
+                        await member.roles.remove(role);
+                    }
+                    results.success.push(`<@${userId}>`);
+                } catch (err) {
+                    results.failed.push(`<@${userId}> (${err.message})`);
+                }
+            }
+            
+            const actionText = action === 'add' ? 'Added' : 'Removed';
+            
+            const embed = {
+                color: results.failed.length === 0 ? 0x2ecc71 : 0xe74c3c,
+                title: `👥 Mass Role ${actionText}`,
+                description: `Role: <@&${role.id}>`,
+                fields: [
+                    { name: `✅ Successful (${results.success.length})`, value: results.success.join(', ') || 'None', inline: false },
+                    { name: `❌ Failed (${results.failed.length})`, value: results.failed.join(', ') || 'None', inline: false }
+                ],
+                footer: { text: `Executed by ${interaction.user.tag}` },
+                timestamp: new Date()
+            };
+            
+            await interaction.editReply({ embeds: [embed] });
+            return;
+        }
+
+        if (commandName === 'appeal') {
+            const serverId = interaction.options.getString('server_id');
+            const reason = interaction.options.getString('reason');
+            
+            try {
+                // Create appeals table
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS ban_appeals (
+                        id SERIAL PRIMARY KEY,
+                        guild_id VARCHAR(32) NOT NULL,
+                        user_id VARCHAR(32) NOT NULL,
+                        reason TEXT NOT NULL,
+                        status VARCHAR(16) DEFAULT 'pending',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        reviewed_by VARCHAR(32),
+                        reviewed_at TIMESTAMP
+                    )
+                `);
+                
+                // Check if server exists and user is banned
+                let guild;
+                try {
+                    guild = await client.guilds.fetch(serverId);
+                } catch (err) {
+                    await interaction.reply({ content: '❌ Invalid server ID or bot is not in that server.', flags: 64 });
+                    return;
+                }
+                
+                const ban = await guild.bans.fetch(interaction.user.id).catch(() => null);
+                if (!ban) {
+                    await interaction.reply({ content: '❌ You are not banned from that server.', flags: 64 });
+                    return;
+                }
+                
+                // Check for existing pending appeal
+                const existing = await db.query(
+                    'SELECT * FROM ban_appeals WHERE guild_id = $1 AND user_id = $2 AND status = $3',
+                    [serverId, interaction.user.id, 'pending']
+                );
+                
+                if (existing.rows.length > 0) {
+                    await interaction.reply({ content: '❌ You already have a pending appeal for this server.', flags: 64 });
+                    return;
+                }
+                
+                // Create appeal
+                const result = await db.query(
+                    'INSERT INTO ban_appeals (guild_id, user_id, reason) VALUES ($1, $2, $3) RETURNING id',
+                    [serverId, interaction.user.id, reason]
+                );
+                
+                const appealId = result.rows[0].id;
+                
+                await interaction.reply({ 
+                    content: `✅ Your appeal has been submitted to **${guild.name}**.\n📋 Appeal ID: \`${appealId}\`\n\nModerators will review your appeal shortly.`, 
+                    flags: 64 
+                });
+                
+                // Notify server (try to send to a channel)
+                const channels = guild.channels.cache.filter(c => c.isTextBased() && c.name.includes('appeal') || c.name.includes('mod'));
+                const notifChannel = channels.first();
+                
+                if (notifChannel) {
+                    const embed = {
+                        color: 0xfaa61a,
+                        title: '📝 New Ban Appeal',
+                        fields: [
+                            { name: 'User', value: `<@${interaction.user.id}> (${interaction.user.tag})`, inline: true },
+                            { name: 'Appeal ID', value: `${appealId}`, inline: true },
+                            { name: 'Reason', value: reason, inline: false }
+                        ],
+                        footer: { text: 'Use /appeals to manage appeals' },
+                        timestamp: new Date()
+                    };
+                    await notifChannel.send({ embeds: [embed] });
+                }
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error submitting appeal: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'appeals') {
+            const action = interaction.options.getString('action') || 'view';
+            const appealId = interaction.options.getInteger('appeal_id');
+            
+            try {
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS ban_appeals (
+                        id SERIAL PRIMARY KEY,
+                        guild_id VARCHAR(32) NOT NULL,
+                        user_id VARCHAR(32) NOT NULL,
+                        reason TEXT NOT NULL,
+                        status VARCHAR(16) DEFAULT 'pending',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        reviewed_by VARCHAR(32),
+                        reviewed_at TIMESTAMP
+                    )
+                `);
+                
+                if (action === 'view') {
+                    const appeals = await db.query(
+                        'SELECT * FROM ban_appeals WHERE guild_id = $1 ORDER BY created_at DESC LIMIT 10',
+                        [interaction.guild.id]
+                    );
+                    
+                    if (appeals.rows.length === 0) {
+                        await interaction.reply({ content: '📋 No appeals found.', flags: 64 });
+                        return;
+                    }
+                    
+                    const description = appeals.rows.map(a => {
+                        const statusEmoji = a.status === 'pending' ? '⏳' : a.status === 'approved' ? '✅' : '❌';
+                        return `${statusEmoji} **ID ${a.id}** - <@${a.user_id}> - ${a.status}\n${a.reason.substring(0, 100)}...`;
+                    }).join('\n\n');
+                    
+                    const embed = {
+                        color: 0x3498db,
+                        title: '📋 Ban Appeals',
+                        description,
+                        footer: { text: 'Use /appeals action:Approve/Deny appeal_id:ID to manage' }
+                    };
+                    
+                    await interaction.reply({ embeds: [embed], flags: 64 });
+                } else if (action === 'approve' || action === 'deny') {
+                    if (!appealId) {
+                        await interaction.reply({ content: '❌ Please provide an appeal ID.', flags: 64 });
+                        return;
+                    }
+                    
+                    const appeal = await db.query(
+                        'SELECT * FROM ban_appeals WHERE id = $1 AND guild_id = $2',
+                        [appealId, interaction.guild.id]
+                    );
+                    
+                    if (appeal.rows.length === 0) {
+                        await interaction.reply({ content: '❌ Appeal not found.', flags: 64 });
+                        return;
+                    }
+                    
+                    const appealData = appeal.rows[0];
+                    
+                    if (appealData.status !== 'pending') {
+                        await interaction.reply({ content: '❌ This appeal has already been reviewed.', flags: 64 });
+                        return;
+                    }
+                    
+                    // Update appeal
+                    await db.query(
+                        'UPDATE ban_appeals SET status = $1, reviewed_by = $2, reviewed_at = CURRENT_TIMESTAMP WHERE id = $3',
+                        [action === 'approve' ? 'approved' : 'denied', interaction.user.id, appealId]
+                    );
+                    
+                    if (action === 'approve') {
+                        // Unban user
+                        try {
+                            await interaction.guild.members.unban(appealData.user_id, `Appeal approved by ${interaction.user.tag}`);
+                        } catch (err) {
+                            await interaction.reply({ content: `⚠️ Appeal approved but failed to unban: ${err.message}`, flags: 64 });
+                            return;
+                        }
+                    }
+                    
+                    const statusText = action === 'approve' ? 'approved ✅' : 'denied ❌';
+                    await interaction.reply({ content: `Appeal #${appealId} has been ${statusText}.`, flags: 64 });
+                    
+                    // Try to DM user
+                    try {
+                        const user = await client.users.fetch(appealData.user_id);
+                        const dmText = action === 'approve' 
+                            ? `✅ Your ban appeal for **${interaction.guild.name}** has been approved! You can now rejoin the server.`
+                            : `❌ Your ban appeal for **${interaction.guild.name}** has been denied.`;
+                        await user.send(dmText);
+                    } catch (err) {
+                        console.log('Could not DM user about appeal decision');
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error managing appeals: ' + err.message, flags: 64 });
             }
             return;
         }
