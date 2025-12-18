@@ -1,4 +1,67 @@
 // Removed invalid top-level imgsay handler. See below for correct placement.
+// --- TICKETS TABLE ---
+async function ensureTicketsTable() {
+    await db.query(`CREATE TABLE IF NOT EXISTS ticket_config (
+        guild_id VARCHAR(32) PRIMARY KEY,
+        category_id VARCHAR(32),
+        support_role_id VARCHAR(32),
+        ticket_counter INTEGER DEFAULT 0
+    )`);
+    await db.query(`CREATE TABLE IF NOT EXISTS tickets (
+        channel_id VARCHAR(32) PRIMARY KEY,
+        guild_id VARCHAR(32),
+        user_id VARCHAR(32),
+        ticket_number INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        closed BOOLEAN DEFAULT FALSE
+    )`);
+}
+
+// --- REACTION ROLES TABLE ---
+async function ensureReactionRolesTable() {
+    await db.query(`CREATE TABLE IF NOT EXISTS reaction_roles (
+        id SERIAL PRIMARY KEY,
+        guild_id VARCHAR(32),
+        message_id VARCHAR(32),
+        channel_id VARCHAR(32),
+        emoji VARCHAR(255),
+        role_id VARCHAR(32),
+        UNIQUE(message_id, emoji)
+    )`);
+}
+
+// --- GIVEAWAYS TABLE ---
+async function ensureGiveawaysTable() {
+    await db.query(`CREATE TABLE IF NOT EXISTS giveaways (
+        message_id VARCHAR(32) PRIMARY KEY,
+        guild_id VARCHAR(32),
+        channel_id VARCHAR(32),
+        prize TEXT,
+        winners INTEGER,
+        host_id VARCHAR(32),
+        end_time BIGINT,
+        ended BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`);
+}
+
+// --- SUGGESTIONS TABLE ---
+async function ensureSuggestionsTable() {
+    await db.query(`CREATE TABLE IF NOT EXISTS suggestion_config (
+        guild_id VARCHAR(32) PRIMARY KEY,
+        channel_id VARCHAR(32),
+        staff_role_id VARCHAR(32)
+    )`);
+    await db.query(`CREATE TABLE IF NOT EXISTS suggestions (
+        message_id VARCHAR(32) PRIMARY KEY,
+        guild_id VARCHAR(32),
+        user_id VARCHAR(32),
+        suggestion TEXT,
+        status VARCHAR(16) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`);
+}
+
 // --- BUMP REMINDERS TABLE ---
 async function ensureBumpRemindersTable() {
     await db.query(`CREATE TABLE IF NOT EXISTS bump_reminders (
@@ -299,6 +362,100 @@ const commands = [
         .addStringOption(option => option.setName('user_ids').setDescription('User IDs separated by spaces or commas').setRequired(true))
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
     new SlashCommandBuilder()
+        .setName('ticket')
+        .setDescription('Create a support ticket'),
+    new SlashCommandBuilder()
+        .setName('closeticket')
+        .setDescription('Close the current ticket')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+    new SlashCommandBuilder()
+        .setName('ticketsetup')
+        .setDescription('Configure the ticket system')
+        .addChannelOption(option => option.setName('category').setDescription('Category for ticket channels').setRequired(true))
+        .addRoleOption(option => option.setName('support_role').setDescription('Support staff role').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
+        .setName('reactionrole')
+        .setDescription('Manage reaction roles')
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('create')
+                .setDescription('Create a reaction role message')
+                .addChannelOption(option => option.setName('channel').setDescription('Channel for the message').setRequired(true))
+                .addStringOption(option => option.setName('title').setDescription('Message title').setRequired(true))
+                .addStringOption(option => option.setName('description').setDescription('Message description').setRequired(false))
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('add')
+                .setDescription('Add a role-emoji pair to a message')
+                .addStringOption(option => option.setName('message_id').setDescription('Message ID').setRequired(true))
+                .addStringOption(option => option.setName('emoji').setDescription('Emoji to use').setRequired(true))
+                .addRoleOption(option => option.setName('role').setDescription('Role to assign').setRequired(true))
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('remove')
+                .setDescription('Remove a reaction role from a message')
+                .addStringOption(option => option.setName('message_id').setDescription('Message ID').setRequired(true))
+                .addStringOption(option => option.setName('emoji').setDescription('Emoji to remove').setRequired(true))
+        )
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
+    new SlashCommandBuilder()
+        .setName('giveaway')
+        .setDescription('Manage giveaways')
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('start')
+                .setDescription('Start a giveaway')
+                .addStringOption(option => option.setName('prize').setDescription('Prize description').setRequired(true))
+                .addStringOption(option => option.setName('duration').setDescription('Duration (e.g., 1h, 30m, 1d)').setRequired(true))
+                .addIntegerOption(option => option.setName('winners').setDescription('Number of winners').setRequired(true).setMinValue(1))
+                .addChannelOption(option => option.setName('channel').setDescription('Channel (current if not specified)').setRequired(false))
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('end')
+                .setDescription('End a giveaway early')
+                .addStringOption(option => option.setName('message_id').setDescription('Giveaway message ID').setRequired(true))
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('reroll')
+                .setDescription('Reroll giveaway winners')
+                .addStringOption(option => option.setName('message_id').setDescription('Giveaway message ID').setRequired(true))
+        )
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    new SlashCommandBuilder()
+        .setName('suggest')
+        .setDescription('Submit a suggestion')
+        .addStringOption(option => option.setName('suggestion').setDescription('Your suggestion').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('suggestion')
+        .setDescription('Manage suggestions')
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('approve')
+                .setDescription('Approve a suggestion')
+                .addStringOption(option => option.setName('message_id').setDescription('Suggestion message ID').setRequired(true))
+                .addStringOption(option => option.setName('reason').setDescription('Approval reason').setRequired(false))
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('deny')
+                .setDescription('Deny a suggestion')
+                .addStringOption(option => option.setName('message_id').setDescription('Suggestion message ID').setRequired(true))
+                .addStringOption(option => option.setName('reason').setDescription('Denial reason').setRequired(false))
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('setup')
+                .setDescription('Configure suggestions channel')
+                .addChannelOption(option => option.setName('channel').setDescription('Suggestions channel').setRequired(true))
+                .addRoleOption(option => option.setName('staff_role').setDescription('Staff role for managing suggestions').setRequired(false))
+        )
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    new SlashCommandBuilder()
         .setName('appeal')
         .setDescription('Submit a ban appeal')
         .addStringOption(option => option.setName('server_id').setDescription('Server ID you were banned from').setRequired(true))
@@ -441,9 +598,10 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildModeration,
-        GatewayIntentBits.AutoModerationExecution
+        GatewayIntentBits.AutoModerationExecution,
+        GatewayIntentBits.GuildMessageReactions
     ],
-    partials: [Partials.Channel, Partials.Message]
+    partials: [Partials.Channel, Partials.Message, Partials.Reaction]
 });
 
 // Integrated HTTP server (health check + optional dashboard)
@@ -2277,6 +2435,565 @@ app.listen(PORT, () => {
             return;
         }
 
+        if (commandName === 'ticket') {
+            try {
+                await ensureTicketsTable();
+                
+                // Check if ticket already exists for user
+                const existing = await db.query(
+                    'SELECT * FROM tickets WHERE guild_id = $1 AND user_id = $2 AND closed = FALSE',
+                    [interaction.guild.id, interaction.user.id]
+                );
+                
+                if (existing.rows.length > 0) {
+                    const channelId = existing.rows[0].channel_id;
+                    await interaction.reply({ 
+                        content: `❌ You already have an open ticket: <#${channelId}>`, 
+                        flags: 64 
+                    });
+                    return;
+                }
+                
+                // Get config
+                const config = await db.query('SELECT * FROM ticket_config WHERE guild_id = $1', [interaction.guild.id]);
+                
+                if (config.rows.length === 0) {
+                    await interaction.reply({ 
+                        content: '❌ Ticket system is not configured. Ask an admin to use `/ticketsetup`.', 
+                        flags: 64 
+                    });
+                    return;
+                }
+                
+                const ticketConfig = config.rows[0];
+                const category = interaction.guild.channels.cache.get(ticketConfig.category_id);
+                
+                if (!category) {
+                    await interaction.reply({ 
+                        content: '❌ Ticket category not found. Ask an admin to reconfigure with `/ticketsetup`.', 
+                        flags: 64 
+                    });
+                    return;
+                }
+                
+                // Increment counter
+                const newCounter = ticketConfig.ticket_counter + 1;
+                await db.query(
+                    'UPDATE ticket_config SET ticket_counter = $1 WHERE guild_id = $2',
+                    [newCounter, interaction.guild.id]
+                );
+                
+                await interaction.deferReply({ flags: 64 });
+                
+                // Create channel
+                const channelName = `ticket-${newCounter}`;
+                const permissionOverwrites = [
+                    {
+                        id: interaction.guild.roles.everyone.id,
+                        deny: ['ViewChannel']
+                    },
+                    {
+                        id: interaction.user.id,
+                        allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
+                    }
+                ];
+                
+                if (ticketConfig.support_role_id) {
+                    permissionOverwrites.push({
+                        id: ticketConfig.support_role_id,
+                        allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory']
+                    });
+                }
+                
+                const channel = await interaction.guild.channels.create({
+                    name: channelName,
+                    type: 0, // Text channel
+                    parent: category.id,
+                    permissionOverwrites
+                });
+                
+                // Save to database
+                await db.query(
+                    'INSERT INTO tickets (channel_id, guild_id, user_id, ticket_number) VALUES ($1, $2, $3, $4)',
+                    [channel.id, interaction.guild.id, interaction.user.id, newCounter]
+                );
+                
+                // Send welcome message
+                const supportRole = ticketConfig.support_role_id ? `<@&${ticketConfig.support_role_id}>` : 'Staff';
+                await channel.send({
+                    content: `${interaction.user} ${ticketConfig.support_role_id ? `<@&${ticketConfig.support_role_id}>` : ''}`,
+                    embeds: [{
+                        color: 0x3498db,
+                        title: `🎫 Ticket #${newCounter}`,
+                        description: `Welcome ${interaction.user}! ${supportRole} will be with you shortly.\n\nPlease describe your issue and wait for a response.`,
+                        footer: { text: 'Use /closeticket to close this ticket' },
+                        timestamp: new Date()
+                    }]
+                });
+                
+                await interaction.editReply({ content: `✅ Ticket created: <#${channel.id}>` });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: `❌ Error creating ticket: ${err.message}`, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'closeticket') {
+            try {
+                await ensureTicketsTable();
+                
+                const ticket = await db.query(
+                    'SELECT * FROM tickets WHERE channel_id = $1 AND closed = FALSE',
+                    [interaction.channel.id]
+                );
+                
+                if (ticket.rows.length === 0) {
+                    await interaction.reply({ content: '❌ This is not an open ticket channel.', flags: 64 });
+                    return;
+                }
+                
+                await interaction.reply({ content: '🔒 Closing ticket in 5 seconds...' });
+                
+                // Mark as closed
+                await db.query('UPDATE tickets SET closed = TRUE WHERE channel_id = $1', [interaction.channel.id]);
+                
+                setTimeout(async () => {
+                    await interaction.channel.delete('Ticket closed');
+                }, 5000);
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: `❌ Error closing ticket: ${err.message}`, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'ticketsetup') {
+            const category = interaction.options.getChannel('category');
+            const supportRole = interaction.options.getRole('support_role');
+            
+            try {
+                await ensureTicketsTable();
+                
+                if (category.type !== 4) { // Category channel
+                    await interaction.reply({ content: '❌ Please select a category channel.', flags: 64 });
+                    return;
+                }
+                
+                await db.query(`
+                    INSERT INTO ticket_config (guild_id, category_id, support_role_id, ticket_counter)
+                    VALUES ($1, $2, $3, 0)
+                    ON CONFLICT (guild_id)
+                    DO UPDATE SET category_id = $2, support_role_id = $3
+                `, [interaction.guild.id, category.id, supportRole?.id || null]);
+                
+                const roleText = supportRole ? ` Support role: <@&${supportRole.id}>` : '';
+                await interaction.reply({ 
+                    content: `✅ Ticket system configured!\nCategory: ${category.name}${roleText}\n\nUsers can now create tickets with \`/ticket\`.`,
+                    flags: 64
+                });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: `❌ Error: ${err.message}`, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'reactionrole') {
+            const subcommand = interaction.options.getSubcommand();
+            
+            try {
+                await ensureReactionRolesTable();
+                
+                if (subcommand === 'create') {
+                    const channel = interaction.options.getChannel('channel');
+                    const title = interaction.options.getString('title');
+                    const description = interaction.options.getString('description') || 'React to get roles!';
+                    
+                    if (!channel.isTextBased()) {
+                        await interaction.reply({ content: '❌ Please select a text channel.', flags: 64 });
+                        return;
+                    }
+                    
+                    const embed = {
+                        color: 0x3498db,
+                        title,
+                        description,
+                        footer: { text: 'React with the emojis below to get roles!' },
+                        timestamp: new Date()
+                    };
+                    
+                    const message = await channel.send({ embeds: [embed] });
+                    
+                    await interaction.reply({ 
+                        content: `✅ Reaction role message created in ${channel}!\n\nMessage ID: \`${message.id}\`\n\nUse \`/reactionrole add\` to add role-emoji pairs.`,
+                        flags: 64
+                    });
+                } else if (subcommand === 'add') {
+                    const messageId = interaction.options.getString('message_id');
+                    const emoji = interaction.options.getString('emoji');
+                    const role = interaction.options.getRole('role');
+                    
+                    // Try to find the message
+                    let message = null;
+                    for (const [, channel] of interaction.guild.channels.cache) {
+                        if (channel.isTextBased()) {
+                            try {
+                                message = await channel.messages.fetch(messageId);
+                                if (message) break;
+                            } catch (err) {
+                                continue;
+                            }
+                        }
+                    }
+                    
+                    if (!message) {
+                        await interaction.reply({ content: '❌ Message not found.', flags: 64 });
+                        return;
+                    }
+                    
+                    // Add to database
+                    await db.query(`
+                        INSERT INTO reaction_roles (guild_id, message_id, channel_id, emoji, role_id)
+                        VALUES ($1, $2, $3, $4, $5)
+                        ON CONFLICT (message_id, emoji) DO UPDATE SET role_id = $5
+                    `, [interaction.guild.id, messageId, message.channel.id, emoji, role.id]);
+                    
+                    // Add reaction to message
+                    try {
+                        await message.react(emoji);
+                    } catch (err) {
+                        await interaction.reply({ 
+                            content: `⚠️ Role added to database but couldn't react with emoji. Make sure it's a valid emoji the bot can use.`,
+                            flags: 64
+                        });
+                        return;
+                    }
+                    
+                    await interaction.reply({ 
+                        content: `✅ Reaction role added!\n${emoji} → <@&${role.id}>`,
+                        flags: 64
+                    });
+                } else if (subcommand === 'remove') {
+                    const messageId = interaction.options.getString('message_id');
+                    const emoji = interaction.options.getString('emoji');
+                    
+                    const result = await db.query(
+                        'DELETE FROM reaction_roles WHERE message_id = $1 AND emoji = $2 RETURNING *',
+                        [messageId, emoji]
+                    );
+                    
+                    if (result.rows.length === 0) {
+                        await interaction.reply({ content: '❌ Reaction role not found.', flags: 64 });
+                        return;
+                    }
+                    
+                    await interaction.reply({ 
+                        content: `✅ Reaction role removed for ${emoji}`,
+                        flags: 64
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: `❌ Error: ${err.message}`, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'giveaway') {
+            const subcommand = interaction.options.getSubcommand();
+            
+            try {
+                await ensureGiveawaysTable();
+                
+                if (subcommand === 'start') {
+                    const prize = interaction.options.getString('prize');
+                    const durationStr = interaction.options.getString('duration');
+                    const winners = interaction.options.getInteger('winners');
+                    const channel = interaction.options.getChannel('channel') || interaction.channel;
+                    
+                    // Parse duration
+                    const match = durationStr.match(/^(\d+)([smhd])$/);
+                    if (!match) {
+                        await interaction.reply({ content: '❌ Invalid duration format. Use: 1h, 30m, 1d, etc.', flags: 64 });
+                        return;
+                    }
+                    
+                    const amount = parseInt(match[1]);
+                    const unit = match[2];
+                    let milliseconds = 0;
+                    
+                    switch (unit) {
+                        case 's': milliseconds = amount * 1000; break;
+                        case 'm': milliseconds = amount * 60 * 1000; break;
+                        case 'h': milliseconds = amount * 60 * 60 * 1000; break;
+                        case 'd': milliseconds = amount * 24 * 60 * 60 * 1000; break;
+                    }
+                    
+                    const endTime = Date.now() + milliseconds;
+                    
+                    const embed = {
+                        color: 0xe74c3c,
+                        title: '🎉 GIVEAWAY 🎉',
+                        description: `**Prize:** ${prize}\n\n**Winners:** ${winners}\n**Ends:** <t:${Math.floor(endTime / 1000)}:R>\n**Hosted by:** ${interaction.user}\n\nReact with 🎉 to enter!`,
+                        footer: { text: `${winners} winner(s) | Ends at` },
+                        timestamp: new Date(endTime)
+                    };
+                    
+                    const message = await channel.send({ embeds: [embed] });
+                    await message.react('🎉');
+                    
+                    // Save to database
+                    await db.query(`
+                        INSERT INTO giveaways (message_id, guild_id, channel_id, prize, winners, host_id, end_time)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    `, [message.id, interaction.guild.id, channel.id, prize, winners, interaction.user.id, endTime.toString()]);
+                    
+                    await interaction.reply({ content: `✅ Giveaway started in ${channel}!`, flags: 64 });
+                } else if (subcommand === 'end') {
+                    const messageId = interaction.options.getString('message_id');
+                    
+                    const result = await db.query(
+                        'SELECT * FROM giveaways WHERE message_id = $1 AND guild_id = $2',
+                        [messageId, interaction.guild.id]
+                    );
+                    
+                    if (result.rows.length === 0) {
+                        await interaction.reply({ content: '❌ Giveaway not found.', flags: 64 });
+                        return;
+                    }
+                    
+                    const giveaway = result.rows[0];
+                    
+                    if (giveaway.ended) {
+                        await interaction.reply({ content: '❌ This giveaway has already ended.', flags: 64 });
+                        return;
+                    }
+                    
+                    await interaction.deferReply({ flags: 64 });
+                    
+                    // End the giveaway
+                    await endGiveaway(giveaway.message_id, giveaway.channel_id, giveaway.guild_id);
+                    
+                    await interaction.editReply({ content: '✅ Giveaway ended!' });
+                } else if (subcommand === 'reroll') {
+                    const messageId = interaction.options.getString('message_id');
+                    
+                    const result = await db.query(
+                        'SELECT * FROM giveaways WHERE message_id = $1 AND guild_id = $2 AND ended = TRUE',
+                        [messageId, interaction.guild.id]
+                    );
+                    
+                    if (result.rows.length === 0) {
+                        await interaction.reply({ content: '❌ Giveaway not found or not ended yet.', flags: 64 });
+                        return;
+                    }
+                    
+                    const giveaway = result.rows[0];
+                    const guild = client.guilds.cache.get(giveaway.guild_id);
+                    const channel = guild.channels.cache.get(giveaway.channel_id);
+                    
+                    if (!channel) {
+                        await interaction.reply({ content: '❌ Giveaway channel not found.', flags: 64 });
+                        return;
+                    }
+                    
+                    const message = await channel.messages.fetch(giveaway.message_id).catch(() => null);
+                    if (!message) {
+                        await interaction.reply({ content: '❌ Giveaway message not found.', flags: 64 });
+                        return;
+                    }
+                    
+                    const reaction = message.reactions.cache.get('🎉');
+                    if (!reaction) {
+                        await interaction.reply({ content: '❌ No entries found.', flags: 64 });
+                        return;
+                    }
+                    
+                    const users = await reaction.users.fetch();
+                    const entries = users.filter(u => !u.bot);
+                    
+                    if (entries.size === 0) {
+                        await interaction.reply({ content: '❌ No valid entries.', flags: 64 });
+                        return;
+                    }
+                    
+                    const winnersArray = entries.random(Math.min(giveaway.winners, entries.size));
+                    const winnersMention = Array.isArray(winnersArray) 
+                        ? winnersArray.map(w => `<@${w.id}>`).join(', ')
+                        : `<@${winnersArray.id}>`;
+                    
+                    await channel.send({
+                        content: `🎉 **New winner(s):** ${winnersMention}\n**Prize:** ${giveaway.prize}`
+                    });
+                    
+                    await interaction.reply({ content: '✅ Giveaway rerolled!', flags: 64 });
+                }
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: `❌ Error: ${err.message}`, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'suggest') {
+            const suggestion = interaction.options.getString('suggestion');
+            
+            try {
+                await ensureSuggestionsTable();
+                
+                const config = await db.query('SELECT * FROM suggestion_config WHERE guild_id = $1', [interaction.guild.id]);
+                
+                if (config.rows.length === 0) {
+                    await interaction.reply({ 
+                        content: '❌ Suggestions are not configured. Ask an admin to use `/suggestion setup`.', 
+                        flags: 64 
+                    });
+                    return;
+                }
+                
+                const suggestionChannel = interaction.guild.channels.cache.get(config.rows[0].channel_id);
+                
+                if (!suggestionChannel) {
+                    await interaction.reply({ 
+                        content: '❌ Suggestion channel not found. Ask an admin to reconfigure.', 
+                        flags: 64 
+                    });
+                    return;
+                }
+                
+                const embed = {
+                    color: 0x3498db,
+                    author: {
+                        name: interaction.user.tag,
+                        icon_url: interaction.user.displayAvatarURL()
+                    },
+                    title: '💡 New Suggestion',
+                    description: suggestion,
+                    footer: { text: 'React with 👍 or 👎 to vote' },
+                    timestamp: new Date()
+                };
+                
+                const message = await suggestionChannel.send({ embeds: [embed] });
+                await message.react('👍');
+                await message.react('👎');
+                
+                // Save to database
+                await db.query(`
+                    INSERT INTO suggestions (message_id, guild_id, user_id, suggestion)
+                    VALUES ($1, $2, $3, $4)
+                `, [message.id, interaction.guild.id, interaction.user.id, suggestion]);
+                
+                await interaction.reply({ 
+                    content: `✅ Suggestion submitted to ${suggestionChannel}!`, 
+                    flags: 64 
+                });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: `❌ Error: ${err.message}`, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'suggestion') {
+            const subcommand = interaction.options.getSubcommand();
+            
+            try {
+                await ensureSuggestionsTable();
+                
+                if (subcommand === 'setup') {
+                    const channel = interaction.options.getChannel('channel');
+                    const staffRole = interaction.options.getRole('staff_role');
+                    
+                    await db.query(`
+                        INSERT INTO suggestion_config (guild_id, channel_id, staff_role_id)
+                        VALUES ($1, $2, $3)
+                        ON CONFLICT (guild_id)
+                        DO UPDATE SET channel_id = $2, staff_role_id = $3
+                    `, [interaction.guild.id, channel.id, staffRole?.id || null]);
+                    
+                    const roleText = staffRole ? ` Staff role: <@&${staffRole.id}>` : '';
+                    await interaction.reply({ 
+                        content: `✅ Suggestions configured!\nChannel: ${channel}${roleText}\n\nUsers can now submit suggestions with \`/suggest\`.`,
+                        flags: 64
+                    });
+                } else if (subcommand === 'approve' || subcommand === 'deny') {
+                    const messageId = interaction.options.getString('message_id');
+                    const reason = interaction.options.getString('reason') || 'No reason provided';
+                    
+                    const result = await db.query(
+                        'SELECT * FROM suggestions WHERE message_id = $1 AND guild_id = $2',
+                        [messageId, interaction.guild.id]
+                    );
+                    
+                    if (result.rows.length === 0) {
+                        await interaction.reply({ content: '❌ Suggestion not found.', flags: 64 });
+                        return;
+                    }
+                    
+                    const suggestion = result.rows[0];
+                    
+                    if (suggestion.status !== 'pending') {
+                        await interaction.reply({ content: '❌ This suggestion has already been reviewed.', flags: 64 });
+                        return;
+                    }
+                    
+                    const config = await db.query('SELECT * FROM suggestion_config WHERE guild_id = $1', [interaction.guild.id]);
+                    const suggestionChannel = interaction.guild.channels.cache.get(config.rows[0].channel_id);
+                    
+                    if (!suggestionChannel) {
+                        await interaction.reply({ content: '❌ Suggestion channel not found.', flags: 64 });
+                        return;
+                    }
+                    
+                    const message = await suggestionChannel.messages.fetch(messageId).catch(() => null);
+                    if (!message) {
+                        await interaction.reply({ content: '❌ Suggestion message not found.', flags: 64 });
+                        return;
+                    }
+                    
+                    const status = subcommand === 'approve' ? 'approved' : 'denied';
+                    const color = subcommand === 'approve' ? 0x2ecc71 : 0xe74c3c;
+                    const emoji = subcommand === 'approve' ? '✅' : '❌';
+                    
+                    // Update message
+                    const embed = message.embeds[0];
+                    const newEmbed = {
+                        ...embed,
+                        color,
+                        title: `${emoji} Suggestion ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+                        fields: [
+                            { name: 'Status', value: `${emoji} ${status.toUpperCase()}`, inline: true },
+                            { name: 'Reviewed by', value: `${interaction.user}`, inline: true },
+                            { name: 'Reason', value: reason, inline: false }
+                        ]
+                    };
+                    
+                    await message.edit({ embeds: [newEmbed] });
+                    
+                    // Update database
+                    await db.query(
+                        'UPDATE suggestions SET status = $1 WHERE message_id = $2',
+                        [status, messageId]
+                    );
+                    
+                    await interaction.reply({ content: `✅ Suggestion ${status}!`, flags: 64 });
+                    
+                    // Try to DM user
+                    try {
+                        const user = await client.users.fetch(suggestion.user_id);
+                        await user.send(`${emoji} Your suggestion in **${interaction.guild.name}** has been ${status}!\n**Reason:** ${reason}`);
+                    } catch (err) {
+                        console.log('Could not DM user about suggestion');
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: `❌ Error: ${err.message}`, flags: 64 });
+            }
+            return;
+        }
+
         if (commandName === 'rep') {
             const user = interaction.options.getUser('user') || interaction.user;
             let displayName = user.username;
@@ -3410,5 +4127,164 @@ app.listen(PORT, () => {
 
     // === MODERATION EVENT LOGGING (External kicks) ===
     // Note: guildMemberRemove for leaves and kicks is already handled above with logging channel
+
+    // === REACTION ROLES ===
+    client.on('messageReactionAdd', async (reaction, user) => {
+        if (user.bot) return;
+        
+        // Fetch partial reactions
+        if (reaction.partial) {
+            try {
+                await reaction.fetch();
+            } catch (err) {
+                console.error('Error fetching reaction:', err);
+                return;
+            }
+        }
+        
+        try {
+            await ensureReactionRolesTable();
+            
+            const emoji = reaction.emoji.id ? `<:${reaction.emoji.name}:${reaction.emoji.id}>` : reaction.emoji.name;
+            
+            const result = await db.query(
+                'SELECT * FROM reaction_roles WHERE message_id = $1 AND emoji = $2',
+                [reaction.message.id, emoji]
+            );
+            
+            if (result.rows.length > 0) {
+                const roleId = result.rows[0].role_id;
+                const member = await reaction.message.guild.members.fetch(user.id);
+                const role = reaction.message.guild.roles.cache.get(roleId);
+                
+                if (role && member) {
+                    await member.roles.add(role);
+                }
+            }
+        } catch (err) {
+            console.error('Error handling reaction role add:', err);
+        }
+    });
+
+    client.on('messageReactionRemove', async (reaction, user) => {
+        if (user.bot) return;
+        
+        // Fetch partial reactions
+        if (reaction.partial) {
+            try {
+                await reaction.fetch();
+            } catch (err) {
+                console.error('Error fetching reaction:', err);
+                return;
+            }
+        }
+        
+        try {
+            await ensureReactionRolesTable();
+            
+            const emoji = reaction.emoji.id ? `<:${reaction.emoji.name}:${reaction.emoji.id}>` : reaction.emoji.name;
+            
+            const result = await db.query(
+                'SELECT * FROM reaction_roles WHERE message_id = $1 AND emoji = $2',
+                [reaction.message.id, emoji]
+            );
+            
+            if (result.rows.length > 0) {
+                const roleId = result.rows[0].role_id;
+                const member = await reaction.message.guild.members.fetch(user.id);
+                const role = reaction.message.guild.roles.cache.get(roleId);
+                
+                if (role && member) {
+                    await member.roles.remove(role);
+                }
+            }
+        } catch (err) {
+            console.error('Error handling reaction role remove:', err);
+        }
+    });
+
+    // === GIVEAWAY HELPER FUNCTION ===
+    async function endGiveaway(messageId, channelId, guildId) {
+        try {
+            const guild = client.guilds.cache.get(guildId);
+            if (!guild) return;
+            
+            const channel = guild.channels.cache.get(channelId);
+            if (!channel) return;
+            
+            const message = await channel.messages.fetch(messageId).catch(() => null);
+            if (!message) return;
+            
+            const giveaway = await db.query(
+                'SELECT * FROM giveaways WHERE message_id = $1',
+                [messageId]
+            );
+            
+            if (giveaway.rows.length === 0) return;
+            const gData = giveaway.rows[0];
+            
+            const reaction = message.reactions.cache.get('🎉');
+            if (!reaction) {
+                await channel.send('❌ No entries for the giveaway.');
+                await db.query('UPDATE giveaways SET ended = TRUE WHERE message_id = $1', [messageId]);
+                return;
+            }
+            
+            const users = await reaction.users.fetch();
+            const entries = users.filter(u => !u.bot);
+            
+            if (entries.size === 0) {
+                await channel.send('❌ No valid entries for the giveaway.');
+                await db.query('UPDATE giveaways SET ended = TRUE WHERE message_id = $1', [messageId]);
+                return;
+            }
+            
+            const winnersCount = Math.min(gData.winners, entries.size);
+            const winnersArray = entries.random(winnersCount);
+            const winners = Array.isArray(winnersArray) ? winnersArray : [winnersArray];
+            const winnersMention = winners.map(w => `<@${w.id}>`).join(', ');
+            
+            // Update message
+            const embed = message.embeds[0];
+            const newEmbed = {
+                ...embed,
+                color: 0x2ecc71,
+                title: '🎉 GIVEAWAY ENDED 🎉',
+                description: `**Prize:** ${gData.prize}\n\n**Winners:** ${winnersMention}\n**Hosted by:** <@${gData.host_id}>`,
+                footer: { text: 'Giveaway ended' }
+            };
+            
+            await message.edit({ embeds: [newEmbed] });
+            
+            // Announce winners
+            await channel.send({
+                content: `🎉 Congratulations ${winnersMention}! You won **${gData.prize}**!`
+            });
+            
+            // Mark as ended
+            await db.query('UPDATE giveaways SET ended = TRUE WHERE message_id = $1', [messageId]);
+        } catch (err) {
+            console.error('Error ending giveaway:', err);
+        }
+    }
+
+    // === GIVEAWAY CHECKER (runs every 10 seconds) ===
+    setInterval(async () => {
+        try {
+            await ensureGiveawaysTable();
+            const now = Date.now();
+            
+            const result = await db.query(
+                'SELECT * FROM giveaways WHERE ended = FALSE AND end_time <= $1',
+                [now.toString()]
+            );
+            
+            for (const giveaway of result.rows) {
+                await endGiveaway(giveaway.message_id, giveaway.channel_id, giveaway.guild_id);
+            }
+        } catch (err) {
+            console.error('Error checking giveaways:', err);
+        }
+    }, 10000); // Check every 10 seconds
 
     client.login(process.env.BOT_TOKEN);
