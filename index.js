@@ -59,6 +59,31 @@ const commands = [
         .addIntegerOption(option => option.setName('threshold').setDescription('Reactions needed (default: 3)').setRequired(false))
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
     new SlashCommandBuilder()
+        .setName('purge')
+        .setDescription('Delete multiple messages at once')
+        .addIntegerOption(option => option.setName('count').setDescription('Number of messages to delete (1-100)').setRequired(true))
+        .addUserOption(option => option.setName('user').setDescription('Only delete messages from this user').setRequired(false))
+        .addStringOption(option => option.setName('contains').setDescription('Only delete messages containing this text').setRequired(false))
+        .addBooleanOption(option => option.setName('bots').setDescription('Only delete bot messages').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
+    new SlashCommandBuilder()
+        .setName('lock')
+        .setDescription('Lock the channel (prevent @everyone from sending messages)')
+        .addChannelOption(option => option.setName('channel').setDescription('Channel to lock (current if not specified)').setRequired(false))
+        .addStringOption(option => option.setName('reason').setDescription('Reason for locking').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+    new SlashCommandBuilder()
+        .setName('unlock')
+        .setDescription('Unlock the channel (restore @everyone permissions)')
+        .addChannelOption(option => option.setName('channel').setDescription('Channel to unlock (current if not specified)').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+    new SlashCommandBuilder()
+        .setName('slowmode')
+        .setDescription('Set channel slowmode delay')
+        .addIntegerOption(option => option.setName('seconds').setDescription('Slowmode delay in seconds (0 to disable)').setRequired(true))
+        .addChannelOption(option => option.setName('channel').setDescription('Channel to apply slowmode (current if not specified)').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+    new SlashCommandBuilder()
         .setName('teststarboard')
         .setDescription('Admin: Test the starboard by reposting a message to #starboard')
         .addStringOption(option => option.setName('message').setDescription('Message link or ID').setRequired(true))
@@ -1336,6 +1361,197 @@ app.listen(PORT, () => {
             } catch (err) {
                 console.error(err);
                 await interaction.reply({ content: 'Error fetching cases: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'purge') {
+            const count = interaction.options.getInteger('count');
+            const targetUser = interaction.options.getUser('user');
+            const containsText = interaction.options.getString('contains');
+            const botsOnly = interaction.options.getBoolean('bots');
+            
+            if (count < 1 || count > 100) {
+                await interaction.reply({ content: '❌ Count must be between 1 and 100.', flags: 64 });
+                return;
+            }
+            
+            await interaction.deferReply({ flags: 64 });
+            
+            try {
+                // Fetch messages
+                const messages = await interaction.channel.messages.fetch({ limit: Math.min(count + 50, 100) });
+                
+                // Filter messages
+                let toDelete = messages.filter(m => {
+                    // Skip messages older than 14 days (Discord limitation)
+                    if (Date.now() - m.createdTimestamp > 14 * 24 * 60 * 60 * 1000) return false;
+                    
+                    // Filter by user
+                    if (targetUser && m.author.id !== targetUser.id) return false;
+                    
+                    // Filter by text content
+                    if (containsText && !m.content.toLowerCase().includes(containsText.toLowerCase())) return false;
+                    
+                    // Filter bots only
+                    if (botsOnly && !m.author.bot) return false;
+                    
+                    return true;
+                });
+                
+                // Limit to requested count
+                toDelete = toDelete.first(count);
+                
+                if (toDelete.size === 0) {
+                    await interaction.editReply({ content: '❌ No messages found matching the criteria.' });
+                    return;
+                }
+                
+                // Bulk delete
+                const deleted = await interaction.channel.bulkDelete(toDelete, true);
+                
+                let filterInfo = '';
+                if (targetUser) filterInfo += ` from ${targetUser.tag}`;
+                if (containsText) filterInfo += ` containing "${containsText}"`;
+                if (botsOnly) filterInfo += ' from bots';
+                
+                const confirmMsg = await interaction.editReply({ 
+                    content: `✅ Deleted ${deleted.size} message(s)${filterInfo}.` 
+                });
+                
+                // Auto-delete confirmation after 5 seconds
+                setTimeout(() => confirmMsg.delete().catch(() => {}), 5000);
+                
+                // Log to mod log
+                await db.query(`CREATE TABLE IF NOT EXISTS mod_log_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
+                const logRes = await db.query('SELECT channel_id FROM mod_log_channels WHERE guild_id = $1', [interaction.guild.id]);
+                
+                if (logRes.rows.length > 0) {
+                    const logChannel = interaction.guild.channels.cache.get(logRes.rows[0].channel_id);
+                    if (logChannel && logChannel.isTextBased()) {
+                        const embed = {
+                            color: 0xe74c3c,
+                            title: '🗑️ Messages Purged',
+                            fields: [
+                                { name: 'Channel', value: `<#${interaction.channel.id}>`, inline: true },
+                                { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: true },
+                                { name: 'Count', value: `${deleted.size}`, inline: true },
+                                { name: 'Filters', value: filterInfo || 'None', inline: false }
+                            ],
+                            timestamp: new Date()
+                        };
+                        await logChannel.send({ embeds: [embed] });
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+                await interaction.editReply({ content: '❌ Error purging messages: ' + err.message });
+            }
+            return;
+        }
+
+        if (commandName === 'lock') {
+            const channel = interaction.options.getChannel('channel') || interaction.channel;
+            const reason = interaction.options.getString('reason') || 'No reason provided';
+            
+            if (!channel.isTextBased()) {
+                await interaction.reply({ content: '❌ Please select a text channel.', flags: 64 });
+                return;
+            }
+            
+            try {
+                await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
+                    SendMessages: false
+                }, { reason: `Locked by ${interaction.user.tag}: ${reason}` });
+                
+                await interaction.reply({ 
+                    content: `🔒 <#${channel.id}> has been locked.\n**Reason:** ${reason}` 
+                });
+                
+                // Send message to locked channel
+                if (channel.id !== interaction.channel.id) {
+                    await channel.send({
+                        embeds: [{
+                            color: 0xe74c3c,
+                            description: `🔒 This channel has been locked by ${interaction.user}.\n**Reason:** ${reason}`,
+                            timestamp: new Date()
+                        }]
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error locking channel: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'unlock') {
+            const channel = interaction.options.getChannel('channel') || interaction.channel;
+            
+            if (!channel.isTextBased()) {
+                await interaction.reply({ content: '❌ Please select a text channel.', flags: 64 });
+                return;
+            }
+            
+            try {
+                await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
+                    SendMessages: null
+                }, { reason: `Unlocked by ${interaction.user.tag}` });
+                
+                await interaction.reply({ 
+                    content: `🔓 <#${channel.id}> has been unlocked.` 
+                });
+                
+                // Send message to unlocked channel
+                if (channel.id !== interaction.channel.id) {
+                    await channel.send({
+                        embeds: [{
+                            color: 0x2ecc71,
+                            description: `🔓 This channel has been unlocked by ${interaction.user}.`,
+                            timestamp: new Date()
+                        }]
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error unlocking channel: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'slowmode') {
+            const seconds = interaction.options.getInteger('seconds');
+            const channel = interaction.options.getChannel('channel') || interaction.channel;
+            
+            if (!channel.isTextBased()) {
+                await interaction.reply({ content: '❌ Please select a text channel.', flags: 64 });
+                return;
+            }
+            
+            if (seconds < 0 || seconds > 21600) {
+                await interaction.reply({ content: '❌ Slowmode must be between 0 and 21600 seconds (6 hours).', flags: 64 });
+                return;
+            }
+            
+            try {
+                await channel.setRateLimitPerUser(seconds, `Set by ${interaction.user.tag}`);
+                
+                if (seconds === 0) {
+                    await interaction.reply({ 
+                        content: `⏱️ Slowmode disabled in <#${channel.id}>.` 
+                    });
+                } else {
+                    const formatted = seconds >= 60 
+                        ? `${Math.floor(seconds / 60)} minute(s) ${seconds % 60} second(s)`
+                        : `${seconds} second(s)`;
+                    
+                    await interaction.reply({ 
+                        content: `⏱️ Slowmode set to **${formatted}** in <#${channel.id}>.` 
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error setting slowmode: ' + err.message, flags: 64 });
             }
             return;
         }
