@@ -1,4 +1,15 @@
 // Removed invalid top-level imgsay handler. See below for correct placement.
+// --- BUMP REMINDERS TABLE ---
+async function ensureBumpRemindersTable() {
+    await db.query(`CREATE TABLE IF NOT EXISTS bump_reminders (
+        guild_id VARCHAR(32) PRIMARY KEY,
+        channel_id VARCHAR(32),
+        role_id VARCHAR(32),
+        last_bump BIGINT,
+        next_reminder BIGINT
+    )`);
+}
+
 // --- STARBOARD TRACKING TABLE ---
 async function ensureStarboardTable() {
     await db.query(`CREATE TABLE IF NOT EXISTS starboard_posts (
@@ -236,6 +247,27 @@ const commands = [
                     { name: 'Enterprise', value: 'enterprise' }
                 )
         ),
+    new SlashCommandBuilder()
+        .setName('bumpreminder')
+        .setDescription('Setup automatic bump reminders for Disboard')
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('setup')
+                .setDescription('Enable bump reminders')
+                .addChannelOption(option => option.setName('channel').setDescription('Channel to send reminders').setRequired(true))
+                .addRoleOption(option => option.setName('role').setDescription('Role to ping (optional)').setRequired(false))
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('disable')
+                .setDescription('Disable bump reminders')
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('status')
+                .setDescription('Check bump reminder status')
+        )
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
     new SlashCommandBuilder()
         .setName('history')
         .setDescription('View detailed information about a user')
@@ -487,6 +519,52 @@ app.listen(PORT, () => {
         console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard/frontend.html`);
     }
 });
+
+    // === BUMP REMINDER CHECKER (runs every minute) ===
+    setInterval(async () => {
+        try {
+            await ensureBumpRemindersTable();
+            const now = Date.now();
+            
+            // Find all servers with reminders due
+            const result = await db.query(
+                'SELECT * FROM bump_reminders WHERE next_reminder > 0 AND next_reminder <= $1',
+                [now.toString()]
+            );
+            
+            for (const config of result.rows) {
+                try {
+                    const guild = client.guilds.cache.get(config.guild_id);
+                    if (!guild) continue;
+                    
+                    const channel = guild.channels.cache.get(config.channel_id);
+                    if (!channel || !channel.isTextBased()) continue;
+                    
+                    const rolePing = config.role_id ? `<@&${config.role_id}> ` : '';
+                    
+                    await channel.send({
+                        content: rolePing,
+                        embeds: [{
+                            color: 0x3498db,
+                            title: '⏰ Bump Reminder',
+                            description: `It's time to bump the server!\n\nUse \`/bump\` to bump this server on Disboard.`,
+                            timestamp: new Date()
+                        }]
+                    });
+                    
+                    // Reset reminder time
+                    await db.query(
+                        'UPDATE bump_reminders SET next_reminder = 0 WHERE guild_id = $1',
+                        [config.guild_id]
+                    );
+                } catch (err) {
+                    console.error(`Error sending bump reminder for guild ${config.guild_id}:`, err);
+                }
+            }
+        } catch (err) {
+            console.error('Error checking bump reminders:', err);
+        }
+    }, 60000); // Check every minute
 
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
@@ -1715,6 +1793,75 @@ app.listen(PORT, () => {
             return;
         }
 
+        if (commandName === 'bumpreminder') {
+            const subcommand = interaction.options.getSubcommand();
+            
+            try {
+                await ensureBumpRemindersTable();
+                
+                if (subcommand === 'setup') {
+                    const channel = interaction.options.getChannel('channel');
+                    const role = interaction.options.getRole('role');
+                    
+                    await db.query(`
+                        INSERT INTO bump_reminders (guild_id, channel_id, role_id, last_bump, next_reminder)
+                        VALUES ($1, $2, $3, 0, 0)
+                        ON CONFLICT (guild_id)
+                        DO UPDATE SET channel_id = $2, role_id = $3
+                    `, [interaction.guild.id, channel.id, role?.id || null]);
+                    
+                    const roleText = role ? ` and ping <@&${role.id}>` : '';
+                    await interaction.reply({
+                        content: `✅ Bump reminders enabled! I'll send reminders to <#${channel.id}>${roleText} when it's time to bump.\n\n**How it works:**\n1. Use \`/bump\` in any channel\n2. I'll detect when Disboard confirms the bump\n3. You'll get a reminder after 2 hours`,
+                        flags: 64
+                    });
+                } else if (subcommand === 'disable') {
+                    await db.query('DELETE FROM bump_reminders WHERE guild_id = $1', [interaction.guild.id]);
+                    await interaction.reply({ content: '✅ Bump reminders disabled.', flags: 64 });
+                } else if (subcommand === 'status') {
+                    const result = await db.query('SELECT * FROM bump_reminders WHERE guild_id = $1', [interaction.guild.id]);
+                    
+                    if (result.rows.length === 0) {
+                        await interaction.reply({ 
+                            content: '❌ Bump reminders are not set up. Use `/bumpreminder setup` to enable them.',
+                            flags: 64
+                        });
+                        return;
+                    }
+                    
+                    const config = result.rows[0];
+                    const channel = interaction.guild.channels.cache.get(config.channel_id);
+                    const role = config.role_id ? interaction.guild.roles.cache.get(config.role_id) : null;
+                    
+                    let statusText = `**Bump Reminder Status**\n\n`;
+                    statusText += `📍 **Channel:** ${channel ? `<#${channel.id}>` : 'Channel not found'}\n`;
+                    statusText += `👥 **Role:** ${role ? `<@&${role.id}>` : 'None'}\n`;
+                    
+                    if (config.last_bump > 0) {
+                        const lastBumpTime = new Date(parseInt(config.last_bump));
+                        const nextReminderTime = new Date(parseInt(config.next_reminder));
+                        const now = Date.now();
+                        
+                        statusText += `⏱️ **Last Bump:** <t:${Math.floor(lastBumpTime.getTime() / 1000)}:R>\n`;
+                        
+                        if (now < nextReminderTime.getTime()) {
+                            statusText += `⏰ **Next Reminder:** <t:${Math.floor(nextReminderTime.getTime() / 1000)}:R>`;
+                        } else {
+                            statusText += `✅ **Ready to bump again!**`;
+                        }
+                    } else {
+                        statusText += `\n✨ Waiting for first bump...`;
+                    }
+                    
+                    await interaction.reply({ content: statusText, flags: 64 });
+                }
+            } catch (err) {
+                console.error('Error with bump reminder:', err);
+                await interaction.reply({ content: `❌ Error: ${err.message}`, flags: 64 });
+            }
+            return;
+        }
+
         if (commandName === 'history') {
             const user = interaction.options.getUser('user');
             
@@ -2429,7 +2576,49 @@ app.listen(PORT, () => {
 });
     // Message handler
     client.on('messageCreate', async (message) => {
-        if (message.author.bot || !message.guild) return;
+        if (message.author.bot && message.author.id !== '302050872383242240') return; // Allow Disboard bot
+        if (!message.guild) return;
+
+        // === DISBOARD BUMP DETECTION ===
+        if (message.author.id === '302050872383242240' && message.interaction) {
+            // Disboard bot responded to a slash command
+            if (message.interaction.commandName === 'bump') {
+                try {
+                    await ensureBumpRemindersTable();
+                    const result = await db.query('SELECT * FROM bump_reminders WHERE guild_id = $1', [message.guild.id]);
+                    
+                    if (result.rows.length > 0) {
+                        const config = result.rows[0];
+                        const now = Date.now();
+                        const twoHours = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
+                        const nextReminder = now + twoHours;
+                        
+                        // Update last bump time
+                        await db.query(
+                            'UPDATE bump_reminders SET last_bump = $1, next_reminder = $2 WHERE guild_id = $3',
+                            [now.toString(), nextReminder.toString(), message.guild.id]
+                        );
+                        
+                        // Send confirmation
+                        const channel = message.guild.channels.cache.get(config.channel_id);
+                        if (channel && channel.isTextBased()) {
+                            const bumper = message.interaction.user;
+                            await channel.send({
+                                embeds: [{
+                                    color: 0x2ecc71,
+                                    description: `✅ Bump successful! Thanks ${bumper}!\n⏰ I'll remind you to bump again <t:${Math.floor(nextReminder / 1000)}:R>`,
+                                    timestamp: new Date()
+                                }]
+                            });
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error processing bump:', err);
+                }
+            }
+        }
+
+        if (message.author.bot) return; // Skip other bot messages
 
         // === AUTO-MODERATION (Premium Feature) ===
         const autoModEnabled = await getPremiumFeature(message.guild.id, 'auto_mod_enabled', false);
