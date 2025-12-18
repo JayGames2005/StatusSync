@@ -171,6 +171,16 @@ const commands = [
         .setName('cases')
         .setDescription('View all moderation cases for a user')
         .addUserOption(option => option.setName('user').setDescription('User to view cases for').setRequired(true))
+        .addStringOption(option => 
+            option.setName('status')
+                .setDescription('Filter by case status')
+                .setRequired(false)
+                .addChoices(
+                    { name: 'All Cases', value: 'all' },
+                    { name: 'Open Cases', value: 'open' },
+                    { name: 'Closed Cases', value: 'closed' }
+                )
+        )
         .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
     new SlashCommandBuilder()
         .setName('setmodlog')
@@ -1231,6 +1241,7 @@ app.listen(PORT, () => {
 
         if (commandName === 'cases') {
             const user = interaction.options.getUser('user');
+            const statusFilter = interaction.options.getString('status') || 'all';
             
             if (!user) {
                 await interaction.reply({ content: 'User not found.', flags: 64 });
@@ -1238,25 +1249,38 @@ app.listen(PORT, () => {
             }
             
             try {
-                const res = await db.query(
-                    'SELECT * FROM mod_cases WHERE user_id = $1 AND guild_id = $2 ORDER BY created_at DESC LIMIT 10',
-                    [user.id, interaction.guild.id]
-                );
+                let query = 'SELECT * FROM mod_cases WHERE user_id = $1 AND guild_id = $2';
+                const params = [user.id, interaction.guild.id];
+                
+                if (statusFilter === 'open') {
+                    query += ' AND closed_at IS NULL';
+                } else if (statusFilter === 'closed') {
+                    query += ' AND closed_at IS NOT NULL';
+                }
+                
+                query += ' ORDER BY created_at DESC LIMIT 10';
+                
+                const res = await db.query(query, params);
                 
                 if (!res.rows.length) {
-                    await interaction.reply({ content: `No cases found for **${user.tag}**.`, flags: 64 });
+                    const statusText = statusFilter === 'all' ? '' : ` ${statusFilter}`;
+                    await interaction.reply({ content: `No${statusText} cases found for **${user.tag}**.`, flags: 64 });
                     return;
                 }
                 
-                const cases = res.rows.map(c => 
-                    `**Case #${c.case_id}** - ${c.action} - ${new Date(c.created_at).toLocaleDateString()} - ${c.reason || 'No reason'}`
-                ).join('\n');
+                const cases = res.rows.map(c => {
+                    const statusEmoji = c.closed_at ? '🔒' : '🔓';
+                    const closedInfo = c.closed_at ? ` (Closed: ${c.close_reason || 'No reason'})` : '';
+                    return `${statusEmoji} **Case #${c.case_id}** - ${c.action} - ${new Date(c.created_at).toLocaleDateString()} - ${c.reason || 'No reason'}${closedInfo}`;
+                }).join('\n');
+                
+                const statusTitle = statusFilter === 'all' ? '' : ` (${statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)})`;
                 
                 const embed = {
                     color: 0x3498db,
-                    title: `Cases for ${user.tag}`,
+                    title: `Cases for ${user.tag}${statusTitle}`,
                     description: cases,
-                    footer: { text: `User ID: ${user.id} | Showing last 10 cases` }
+                    footer: { text: `User ID: ${user.id} | Showing last 10 cases | 🔓 = Open | 🔒 = Closed` }
                 };
                 
                 await interaction.reply({ embeds: [embed], flags: 64 });
