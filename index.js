@@ -1166,7 +1166,7 @@ app.listen(PORT, () => {
                 }
                 
                 const embed = nightreign.createFinderEmbed(interaction.user.id);
-                const buttons = nightreign.updateSlotButtons(session);
+                const buttons = nightreign.createSlotButtons();
                 
                 await interaction.update({ embeds: [embed], components: buttons });
                 return;
@@ -1348,7 +1348,7 @@ app.listen(PORT, () => {
                 
                 const session = nightreign.getSession(interaction.user.id);
                 const embed = nightreign.createFinderEmbed(interaction.user.id);
-                const buttons = nightreign.updateSlotButtons(session);
+                const buttons = nightreign.createSlotButtons();
                 
                 await interaction.update({ embeds: [embed], components: buttons });
                 return;
