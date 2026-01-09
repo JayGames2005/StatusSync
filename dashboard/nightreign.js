@@ -3,39 +3,67 @@ let currentMap = null;
 let markedSlots = {};
 let nightreignSeeds = [];
 
-// Map slot positions (x%, y% coordinates)
+// Real slot positions from the GitHub repo (coordinates on 1000x1000 canvas, scaled to percentages)
+// These are the actual building slot coordinates used in the web version
 const slotPositions = {
     normal: [
-        { x: 20, y: 30 }, { x: 35, y: 25 }, { x: 50, y: 20 },
-        { x: 65, y: 30 }, { x: 75, y: 40 }, { x: 70, y: 60 },
-        { x: 50, y: 70 }, { x: 30, y: 65 }, { x: 25, y: 45 }
-    ],
-    mountaintop: [
-        { x: 25, y: 35 }, { x: 40, y: 28 }, { x: 55, y: 25 },
-        { x: 68, y: 35 }, { x: 78, y: 48 }, { x: 72, y: 65 },
-        { x: 52, y: 72 }, { x: 32, y: 68 }, { x: 22, y: 50 }
-    ],
-    noklateo: [
-        { x: 22, y: 32 }, { x: 38, y: 26 }, { x: 52, y: 22 },
-        { x: 66, y: 32 }, { x: 76, y: 45 }, { x: 70, y: 62 },
-        { x: 50, y: 70 }, { x: 30, y: 66 }, { x: 24, y: 48 }
-    ],
-    rotted: [
-        { x: 24, y: 34 }, { x: 39, y: 27 }, { x: 54, y: 24 },
-        { x: 67, y: 34 }, { x: 77, y: 47 }, { x: 71, y: 64 },
-        { x: 51, y: 71 }, { x: 31, y: 67 }, { x: 25, y: 49 }
-    ],
-    crater: [
-        { x: 23, y: 33 }, { x: 37, y: 27 }, { x: 51, y: 23 },
-        { x: 65, y: 33 }, { x: 75, y: 46 }, { x: 69, y: 63 },
-        { x: 49, y: 70 }, { x: 29, y: 66 }, { x: 23, y: 48 }
+        { x: 40.0, y: 18.0 },  // slot_1
+        { x: 71.0, y: 21.0 },  // slot_2
+        { x: 53.5, y: 22.5 },  // slot_3
+        { x: 23.2, y: 28.1 },  // slot_4
+        { x: 62.8, y: 29.3 },  // slot_5
+        { x: 41.2, y: 30.3 },  // slot_6
+        { x: 77.6, y: 36.1 },  // slot_7
+        { x: 21.7, y: 35.4 },  // slot_8
+        { x: 69.3, y: 37.0 },  // slot_9
+        { x: 35.7, y: 39.5 },  // slot_10
+        { x: 58.0, y: 43.0 },  // slot_11
+        { x: 77.4, y: 42.5 },  // slot_12
+        { x: 28.2, y: 44.7 },  // slot_13
+        { x: 66.3, y: 46.5 },  // slot_14
+        { x: 31.8, y: 55.0 },  // slot_15
+        { x: 20.5, y: 55.5 },  // slot_16
+        { x: 80.4, y: 57.6 },  // slot_17
+        { x: 62.9, y: 58.5 },  // slot_18
+        { x: 55.0, y: 63.0 },  // slot_19
+        { x: 75.3, y: 63.1 },  // slot_20
+        { x: 27.6, y: 65.0 },  // slot_21
+        { x: 61.0, y: 69.0 },  // slot_22
+        { x: 45.2, y: 69.5 },  // slot_23
+        { x: 19.9, y: 71.0 },  // slot_24
+        { x: 74.5, y: 74.0 },  // slot_25
+        { x: 40.0, y: 78.0 },  // slot_26
+        { x: 56.6, y: 79.5 }   // slot_27
     ],
     greatHollow: [
-        { x: 26, y: 36 }, { x: 41, y: 29 }, { x: 56, y: 26 },
-        { x: 69, y: 36 }, { x: 79, y: 49 }, { x: 73, y: 66 },
-        { x: 53, y: 73 }, { x: 33, y: 69 }, { x: 27, y: 51 }
+        { x: 34.7, y: 31.2 },  // slot_1
+        { x: 73.3, y: 34.7 },  // slot_2
+        { x: 77.0, y: 41.4 },  // slot_3
+        { x: 61.2, y: 51.2 },  // slot_4
+        { x: 35.3, y: 52.5 },  // slot_5
+        { x: 25.3, y: 57.9 },  // slot_6
+        { x: 64.1, y: 65.5 },  // slot_7
+        { x: 28.0, y: 68.3 },  // slot_8
+        { x: 36.1, y: 77.3 },  // slot_9
+        { x: 45.3, y: 77.9 },  // slot_10
+        { x: 92.1, y: 80.6 },  // slot_11
+        { x: 88.1, y: 89.8 },  // slot_12
+        { x: 68.5, y: 93.1 },  // slot_13
+        { x: 39.7, y: 39.0 },  // slot_14
+        { x: 72.3, y: 47.5 },  // slot_15
+        { x: 43.6, y: 55.1 },  // slot_16
+        { x: 31.9, y: 63.6 },  // slot_17
+        { x: 36.2, y: 74.1 },  // slot_18
+        { x: 89.3, y: 81.6 },  // slot_19
+        { x: 81.1, y: 90.8 }   // slot_20
     ]
 };
+
+// Use same coordinates for all other maps (they share the 27-slot layout)
+slotPositions.mountaintop = slotPositions.normal;
+slotPositions.noklateo = slotPositions.normal;
+slotPositions.rotted = slotPositions.normal;
+slotPositions.crater = slotPositions.normal;
 
 const buildingTypes = {
     church: { name: 'Church', emoji: '⛪', color: '#FAA61A' },
@@ -66,9 +94,18 @@ function selectNightMap(mapType) {
     
     document.getElementById('map-title').textContent = `${mapNames[mapType]} - Mark Building Locations`;
     
-    // Load map image
+    // Load high-res map image from GitHub Pages
     const mapImg = document.getElementById('nightreign-map-img');
-    mapImg.src = `https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/${mapType}Icon.webp`;
+    const mapImages = {
+        normal: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/Normal.webp',
+        mountaintop: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/Mountaintop.webp',
+        noklateo: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/Noklateo%2C%20the%20Shrouded%20City.webp',
+        rotted: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/Rotted%20Woods.webp',
+        crater: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/Crater.webp',
+        greatHollow: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/greatHollow.webp'
+    };
+    
+    mapImg.src = mapImages[mapType];
     
     // Draw markers
     mapImg.onload = () => drawMarkers();
