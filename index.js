@@ -615,6 +615,9 @@ const commands = [
         .addIntegerOption(option => option.setName('appeal_id').setDescription('Appeal ID (for approve/deny)').setRequired(false))
         .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
     new SlashCommandBuilder()
+        .setName('nightreign')
+        .setDescription('Elden Ring: Nightreign seed finder - Find seeds for specific maps and bosses'),
+    new SlashCommandBuilder()
         .setName('levelreward')
         .setDescription('Manage level-up role rewards')
         .addSubcommand(subcommand =>
@@ -1075,6 +1078,42 @@ app.listen(PORT, () => {
                 return;
             }
             
+            // Nightreign Seed Finder - Map Selection Buttons
+            if (interaction.customId.startsWith('nightreign_map_')) {
+                const nightreign = require('./nightreign');
+                const mapType = interaction.customId.replace('nightreign_map_', '');
+                
+                const embed = nightreign.createSeedListEmbed(mapType);
+                const buttons = nightreign.createSeedButtons(mapType);
+                
+                await interaction.update({ embeds: [embed], components: buttons });
+                return;
+            }
+            
+            // Nightreign Seed Finder - Seed Detail Buttons
+            if (interaction.customId.startsWith('nightreign_seed_')) {
+                const nightreign = require('./nightreign');
+                const parts = interaction.customId.split('_');
+                const mapType = parts[2];
+                const seedIndex = parseInt(parts[3]);
+                
+                const embed = nightreign.createSeedDetailEmbed(mapType, seedIndex);
+                const backButton = nightreign.createBackButton(mapType);
+                
+                await interaction.update({ embeds: [embed], components: [backButton] });
+                return;
+            }
+            
+            // Nightreign Seed Finder - Back Button
+            if (interaction.customId === 'nightreign_back') {
+                const nightreign = require('./nightreign');
+                const embed = nightreign.createMapSelectionEmbed();
+                const selectMenu = nightreign.createMapSelectMenu();
+                
+                await interaction.update({ embeds: [embed], components: [selectMenu] });
+                return;
+            }
+            
             // Ticket Creation Button
             if (interaction.customId === 'create_ticket') {
                 try {
@@ -1182,6 +1221,21 @@ app.listen(PORT, () => {
                     console.error(err);
                     await interaction.editReply({ content: `❌ Error: ${err.message}` });
                 }
+                return;
+            }
+        }
+        
+        // === STRING SELECT MENU INTERACTIONS ===
+        if (interaction.isStringSelectMenu()) {
+            // Nightreign Map Selection
+            if (interaction.customId === 'nightreign_map_select') {
+                const nightreign = require('./nightreign');
+                const mapType = interaction.values[0];
+                
+                const embed = nightreign.createSeedListEmbed(mapType);
+                const buttons = nightreign.createSeedButtons(mapType);
+                
+                await interaction.update({ embeds: [embed], components: buttons });
                 return;
             }
         }
@@ -4162,6 +4216,28 @@ app.listen(PORT, () => {
             } catch (err) {
                 console.error(err);
                 await interaction.editReply({ content: '❌ Error generating transcript: ' + err.message });
+            }
+            return;
+        }
+
+        // === NIGHTREIGN SEED FINDER ===
+        if (commandName === 'nightreign') {
+            try {
+                const nightreign = require('./nightreign');
+                
+                const embed = nightreign.createMapSelectionEmbed();
+                const selectMenu = nightreign.createMapSelectMenu();
+                
+                await interaction.reply({ 
+                    embeds: [embed], 
+                    components: [selectMenu]
+                });
+            } catch (err) {
+                console.error('Nightreign error:', err);
+                await interaction.reply({ 
+                    content: '❌ Error loading Nightreign seed finder: ' + err.message, 
+                    flags: 64 
+                });
             }
             return;
         }
