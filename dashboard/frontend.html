@@ -35,6 +35,7 @@
             <button onclick="showTab('overview')" class="nav-btn active" data-tab="overview">Overview</button>
             <button onclick="showTab('moderation')" class="nav-btn" data-tab="moderation">Moderation</button>
             <button onclick="showTab('leaderboards')" class="nav-btn" data-tab="leaderboards">Leaderboards</button>
+            <button onclick="showTab('nightreign')" class="nav-btn" data-tab="nightreign">🗺️ Nightreign</button>
             <button onclick="showTab('settings')" class="nav-btn" data-tab="settings">Settings</button>
             <button onclick="showTab('logs')" class="nav-btn" data-tab="logs">Logs</button>
             <button onclick="showTab('premium')" class="nav-btn" data-tab="premium">💎 Premium</button>
@@ -151,6 +152,89 @@
                     <h3>📅 Weekly XP Leaders</h3>
                     <div id="weekly-leaderboard" class="leaderboard"></div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Nightreign Seed Finder Tab -->
+        <div id="tab-nightreign" class="tab-content">
+            <h2>🗺️ Elden Ring: Nightreign Seed Finder</h2>
+            <p class="description">Click building locations on the map to identify your seed</p>
+            
+            <!-- Map Selection -->
+            <div class="card">
+                <h3>Select Map Type</h3>
+                <div class="nightreign-map-grid">
+                    <button class="map-btn" onclick="selectNightMap('normal')" data-map="normal">
+                        <img src="https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/normalIcon.webp" alt="Normal">
+                        <span>Normal</span>
+                    </button>
+                    <button class="map-btn" onclick="selectNightMap('mountaintop')" data-map="mountaintop">
+                        <img src="https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/mountainIcon.webp" alt="Mountaintop">
+                        <span>Mountaintop</span>
+                    </button>
+                    <button class="map-btn" onclick="selectNightMap('noklateo')" data-map="noklateo">
+                        <img src="https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/noklateoIcon.webp" alt="Noklateo">
+                        <span>Noklateo</span>
+                    </button>
+                    <button class="map-btn" onclick="selectNightMap('rotted')" data-map="rotted">
+                        <img src="https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/rotIcon.webp" alt="Rotted Woods">
+                        <span>Rotted Woods</span>
+                    </button>
+                    <button class="map-btn" onclick="selectNightMap('crater')" data-map="crater">
+                        <img src="https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/craterIcon.webp" alt="Crater">
+                        <span>Crater</span>
+                    </button>
+                    <button class="map-btn" onclick="selectNightMap('greatHollow')" data-map="greatHollow">
+                        <img src="https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/greatHollowIcon.webp" alt="Great Hollow">
+                        <span>Great Hollow</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Interactive Map -->
+            <div id="nightreign-finder" class="card" style="display: none;">
+                <h3 id="map-title">Interactive Map</h3>
+                
+                <div class="nightreign-container">
+                    <!-- Map with clickable markers -->
+                    <div class="nightreign-map-wrapper">
+                        <img id="nightreign-map-img" src="" alt="Map" class="nightreign-map">
+                        <svg id="nightreign-markers" class="nightreign-svg"></svg>
+                    </div>
+
+                    <!-- Sidebar -->
+                    <div class="nightreign-sidebar">
+                        <h4>Marked Locations</h4>
+                        <div id="marked-slots"></div>
+
+                        <h4 style="margin-top: 20px;">Nightlord (Optional)</h4>
+                        <select id="nightlord-select" class="form-control">
+                            <option value="">Any Nightlord</option>
+                            <option value="Tricephalos">Tricephalos</option>
+                            <option value="Gaping Jaw">Gaping Jaw</option>
+                            <option value="Sentient Pest">Sentient Pest</option>
+                            <option value="Augur">Augur</option>
+                            <option value="Equilibrious Beast">Equilibrious Beast</option>
+                            <option value="Darkdrift Knight">Darkdrift Knight</option>
+                            <option value="Fissure in the Fog">Fissure in the Fog</option>
+                            <option value="Night Aspect">Night Aspect</option>
+                            <option value="Heolstor">Heolstor</option>
+                            <option value="Gnoster">Gnoster</option>
+                        </select>
+
+                        <button onclick="searchSeeds()" class="btn-primary" style="width: 100%; margin-top: 20px;">
+                            🔍 Find Seeds
+                        </button>
+                        <button onclick="clearNightreign()" class="btn-secondary" style="width: 100%; margin-top: 10px;">
+                            🔄 Reset
+                        </button>
+
+                        <div id="match-count" style="margin-top: 20px; padding: 10px; background: #2c2f33; border-radius: 8px; text-align: center;"></div>
+                    </div>
+                </div>
+
+                <!-- Results -->
+                <div id="nightreign-results" style="margin-top: 30px;"></div>
             </div>
         </div>
 
@@ -501,5 +585,6 @@
     </footer>
 
     <script src="frontend.js"></script>
+    <script src="nightreign.js"></script>
 </body>
 </html>

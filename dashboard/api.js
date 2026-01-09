@@ -659,4 +659,10 @@ router.post('/joingate', authMiddleware, requireGuildId, async (req, res) => {
     }
 });
 
+// Nightreign Seeds API
+router.get('/nightreign-seeds', (req, res) => {
+    const nightreign = require('../nightreign');
+    res.json(nightreign.nightreignSeeds);
+});
+
 module.exports = router;

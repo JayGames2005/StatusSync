@@ -563,6 +563,7 @@ module.exports = {
     buildingTypes,
     mapNames,
     nightlords,
+    nightreignSeeds,
     createFinderSession,
     getSession,
     setSlot,

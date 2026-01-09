@@ -615,9 +615,6 @@ const commands = [
         .addIntegerOption(option => option.setName('appeal_id').setDescription('Appeal ID (for approve/deny)').setRequired(false))
         .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
     new SlashCommandBuilder()
-        .setName('nightreign')
-        .setDescription('🗺️ Elden Ring Nightreign seed finder - Browse maps, bosses, and item locations'),
-    new SlashCommandBuilder()
         .setName('levelreward')
         .setDescription('Manage level-up role rewards')
         .addSubcommand(subcommand =>
@@ -1078,153 +1075,6 @@ app.listen(PORT, () => {
                 return;
             }
             
-            // Nightreign Seed Finder - Slot Marking Buttons
-            if (interaction.customId.startsWith('nightreign_slot_')) {
-                const nightreign = require('./nightreign');
-                const session = nightreign.getSession(interaction.user.id);
-                
-                if (!session) {
-                    await interaction.reply({ content: '❌ Session expired. Use `/nightreign` to start over.', flags: 64 });
-                    return;
-                }
-                
-                // Extract slot number (e.g., "nightreign_slot_3" -> "3")
-                const slotNum = interaction.customId.split('_')[2];
-                
-                // Show building selection menu for this slot
-                const menu = nightreign.createBuildingSelectMenu(slotNum);
-                
-                await interaction.reply({
-                    content: `🏛️ What building is at **Slot ${slotNum}**?`,
-                    components: [menu],
-                    flags: 64
-                });
-                return;
-            }
-            
-            // Nightreign - Select Nightlord Button
-            if (interaction.customId === 'nightreign_select_nightlord') {
-                const nightreign = require('./nightreign');
-                const menu = nightreign.createNightlordSelectMenu();
-                
-                await interaction.reply({
-                    content: '👑 Select the nightlord for your run (optional):',
-                    components: [menu],
-                    flags: 64
-                });
-                return;
-            }
-            
-            // Nightreign - Search Seeds Button
-            if (interaction.customId === 'nightreign_search') {
-                const nightreign = require('./nightreign');
-                const session = nightreign.getSession(interaction.user.id);
-                
-                if (!session) {
-                    await interaction.reply({ content: '❌ Session expired. Use `/nightreign` to start over.', flags: 64 });
-                    return;
-                }
-                
-                const resultsEmbed = nightreign.createResultsEmbed(session, 0);
-                const matches = nightreign.findMatchingSeeds(session);
-                const buttons = nightreign.createResultsButtons(0, matches.length);
-                
-                await interaction.update({ embeds: [resultsEmbed], components: buttons });
-                return;
-            }
-            
-            // Nightreign - Reset Button
-            if (interaction.customId === 'nightreign_reset') {
-                const nightreign = require('./nightreign');
-                const session = nightreign.getSession(interaction.user.id);
-                
-                if (!session) {
-                    await interaction.reply({ content: '❌ Session expired. Use `/nightreign` to start over.', flags: 64 });
-                    return;
-                }
-                
-                // Keep map but clear slots and nightlord
-                const mapType = session.map_type;
-                nightreign.clearSession(interaction.user.id);
-                nightreign.createFinderSession(interaction.user.id, mapType);
-                
-                const embed = nightreign.createFinderEmbed(interaction.user.id);
-                const buttons = nightreign.createSlotButtons();
-                
-                await interaction.update({ embeds: [embed], components: buttons });
-                return;
-            }
-            
-            // Nightreign - Back to Finder Button
-            if (interaction.customId === 'nightreign_back_to_finder') {
-                const nightreign = require('./nightreign');
-                const session = nightreign.getSession(interaction.user.id);
-                
-                if (!session) {
-                    await interaction.reply({ content: '❌ Session expired. Use `/nightreign` to start over.', flags: 64 });
-                    return;
-                }
-                
-                const embed = nightreign.createFinderEmbed(interaction.user.id);
-                const buttons = nightreign.createSlotButtons();
-                
-                await interaction.update({ embeds: [embed], components: buttons });
-                return;
-            }
-            
-            // Nightreign - Result Navigation Buttons
-            if (interaction.customId === 'nightreign_result_prev') {
-                const nightreign = require('./nightreign');
-                const session = nightreign.getSession(interaction.user.id);
-                
-                if (!session) {
-                    await interaction.reply({ content: '❌ Session expired.', flags: 64 });
-                    return;
-                }
-                
-                const currentEmbed = interaction.message.embeds[0];
-                const currentPage = parseInt(currentEmbed.footer.text.match(/\d+/)[0]) - 1;
-                const newPage = Math.max(0, currentPage - 1);
-                
-                const embed = nightreign.createResultsEmbed(session, newPage);
-                const matches = nightreign.findMatchingSeeds(session);
-                const buttons = nightreign.createResultsButtons(newPage, matches.length);
-                
-                await interaction.update({ embeds: [embed], components: buttons });
-                return;
-            }
-            
-            if (interaction.customId === 'nightreign_result_next') {
-                const nightreign = require('./nightreign');
-                const session = nightreign.getSession(interaction.user.id);
-                
-                if (!session) {
-                    await interaction.reply({ content: '❌ Session expired.', flags: 64 });
-                    return;
-                }
-                
-                const currentEmbed = interaction.message.embeds[0];
-                const currentPage = parseInt(currentEmbed.footer.text.match(/\d+/)[0]) - 1;
-                const newPage = currentPage + 1;
-                
-                const embed = nightreign.createResultsEmbed(session, newPage);
-                const matches = nightreign.findMatchingSeeds(session);
-                const buttons = nightreign.createResultsButtons(newPage, matches.length);
-                
-                await interaction.update({ embeds: [embed], components: buttons });
-                return;
-            }
-            
-            // Nightreign Seed Finder - Back Button
-            if (interaction.customId === 'nightreign_back') {
-                const nightreign = require('./nightreign');
-                const embed = nightreign.createMapSelectionEmbed();
-                const selectMenu = nightreign.createMapSelectMenu();
-                
-                await interaction.update({ embeds: [embed], components: [selectMenu] });
-                return;
-            }
-            
             // Ticket Creation Button
             if (interaction.customId === 'create_ticket') {
                 try {
@@ -1338,59 +1188,6 @@ app.listen(PORT, () => {
         
         // === STRING SELECT MENU INTERACTIONS ===
         if (interaction.isStringSelectMenu()) {
-            // Nightreign Map Selection
-            if (interaction.customId === 'nightreign_map_select') {
-                const nightreign = require('./nightreign');
-                const mapType = interaction.values[0];
-                
-                // Create new finder session
-                nightreign.createFinderSession(interaction.user.id, mapType);
-                
-                const session = nightreign.getSession(interaction.user.id);
-                const embed = nightreign.createFinderEmbed(interaction.user.id);
-                const buttons = nightreign.createSlotButtons();
-                
-                await interaction.update({ embeds: [embed], components: buttons });
-                return;
-            }
-            
-            // Nightreign Building Selection for Slot
-            if (interaction.customId.startsWith('nightreign_building_slot_')) {
-                const nightreign = require('./nightreign');
-                const slotNum = interaction.customId.split('_')[3]; // Extract slot number
-                const slotId = `slot_${slotNum}`;
-                const buildingType = interaction.values[0];
-                
-                if (buildingType === 'clear') {
-                    nightreign.clearSlot(interaction.user.id, slotId);
-                    await interaction.update({
-                        content: `✅ Cleared **Slot ${slotNum}**`,
-                        components: []
-                    });
-                } else {
-                    nightreign.setSlot(interaction.user.id, slotId, buildingType);
-                    const building = nightreign.buildingTypes[buildingType];
-                    await interaction.update({
-                        content: `✅ Marked **Slot ${slotNum}** as ${building.emoji} **${building.name}**`,
-                        components: []
-                    });
-                }
-                return;
-            }
-            
-            // Nightreign Nightlord Selection
-            if (interaction.customId === 'nightreign_nightlord_select') {
-                const nightreign = require('./nightreign');
-                const nightlord = interaction.values[0];
-                
-                nightreign.setNightlord(interaction.user.id, nightlord);
-                
-                await interaction.update({
-                    content: `✅ Selected nightlord: **${nightlord}**!`,
-                    components: []
-                });
-                return;
-            }
         }
         
         if (!interaction.isChatInputCommand()) return;
@@ -4374,26 +4171,7 @@ app.listen(PORT, () => {
         }
 
         // === NIGHTREIGN SEED FINDER ===
-        if (commandName === 'nightreign') {
-            try {
-                const nightreign = require('./nightreign');
-                
-                const embed = nightreign.createMapSelectionEmbed();
-                const selectMenu = nightreign.createMapSelectMenu();
-                
-                await interaction.reply({ 
-                    embeds: [embed], 
-                    components: [selectMenu]
-                });
-            } catch (err) {
-                console.error('Nightreign error:', err);
-                await interaction.reply({ 
-                    content: '❌ Error loading Nightreign seed finder: ' + err.message, 
-                    flags: 64 
-                });
-            }
-            return;
-        }
+
 
         if (commandName === 'reactionrole') {
             const subcommand = interaction.options.getSubcommand();
