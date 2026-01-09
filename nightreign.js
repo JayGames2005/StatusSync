@@ -1,201 +1,148 @@
-// Nightreign Seed Finder Module - Interactive Map Builder
+// Nightreign Seed Finder Module - Slot-based Map System
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-// Building types available in Nightreign
+// Building types available in Nightreign (matching website)
 const buildingTypes = {
-    'church': { name: 'Church', emoji: '⛪', description: 'Grace restoration' },
+    'church': { name: 'Church', emoji: '⛪', description: 'Grace restoration point' },
     'village': { name: 'Village', emoji: '🏘️', description: 'NPC merchant hub' },
-    'sorcerer_rise': { name: "Sorcerer's Rise", emoji: '🗼', description: 'Magic enhancement' },
-    'none': { name: 'Empty', emoji: '⚫', description: 'No building' }
+    'sorcerer_rise': { name: "Sorcerer's Rise", emoji: '🗼', description: 'Magic enhancement tower' }
 };
 
-// Map locations - these are the orange dot positions on the map
-const mapLocations = [
-    'North', 'Northeast', 'East', 'Southeast', 
-    'South', 'Southwest', 'West', 'Northwest', 
-    'Center'
+// Map slots - each map has specific slot positions (matching website's orange dots)
+const mapSlots = ['slot_1', 'slot_2', 'slot_3', 'slot_4', 'slot_5', 'slot_6', 'slot_7', 'slot_8', 'slot_9'];
+
+// Nightlord bosses (matching game data)
+const nightlords = [
+    'Tricephalos', 'Gaping Jaw', 'Sentient Pest', 'Augur', 
+    'Equilibrious Beast', 'Darkdrift Knight', 'Fissure in the Fog',
+    'Night Aspect', 'Heolstor', 'Gnoster'
 ];
 
-// Spawn locations for each map
-const spawnLocations = ['North Spawn', 'South Spawn', 'East Spawn', 'West Spawn'];
-
-// Boss encounters that appear in runs
-const bossEncounters = [
-    'Gravebird', 'Crucible Knight', 'Erdtree Avatar', 'Ulcerated Tree Spirit',
-    'Night Cavalry', 'Deathbird', 'Beastman', 'Stonedigger Troll',
-    'Zamor Knight', 'Frost Dragon', 'Ancient Hero', 'Misbegotten Warrior',
-    'Mimic Tear', 'Dragonkin Soldier', 'Gargoyle', 'Ancestral Spirit',
-    'Cleanrot Knight', 'Kindred of Rot', 'Putrid Crystalian', 'Pest Spirit',
-    'Godskin Apostle', 'Draconic Tree Sentinel', 'Black Blade Kindred',
-    'Abductor Virgin', 'Magma Wyrm', 'Fire Prelate', 'Man-Serpent'
-];
-
-// Comprehensive seed database with spawn, buildings, and boss data
-// Each seed only needs 3 key data points to identify
+// Comprehensive seed database (slot-based, matching website structure)
 const nightreignSeeds = [
     // NORMAL MAP SEEDS
     {
-        id: 'NRM-001',
-        mapType: 'normal',
-        spawn: 'North Spawn',
-        buildings: { 'North': 'church', 'East': 'village', 'South': 'none' },
-        boss: 'Gravebird',
+        seed_id: 'NRM-001',
+        map_type: 'normal',
+        slots: { slot_1: 'church', slot_3: 'village', slot_7: 'church' },
         nightlord: 'Gaping Jaw',
-        difficulty: 'Easy',
-        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/normalIcon.webp'
+        difficulty: 'Easy'
     },
     {
-        id: 'NRM-002',
-        mapType: 'normal',
-        spawn: 'South Spawn',
-        buildings: { 'North': 'sorcerer_rise', 'West': 'church', 'East': 'none' },
-        boss: 'Crucible Knight',
+        seed_id: 'NRM-002',
+        map_type: 'normal',
+        slots: { slot_2: 'sorcerer_rise', slot_4: 'church', slot_8: 'village' },
         nightlord: 'Sentient Pest',
-        difficulty: 'Easy',
-        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/normalIcon.webp'
+        difficulty: 'Easy'
     },
     {
-        id: 'NRM-003',
-        mapType: 'normal',
-        spawn: 'East Spawn',
-        buildings: { 'Center': 'church', 'North': 'village', 'South': 'sorcerer_rise' },
-        boss: 'Night Cavalry',
+        seed_id: 'NRM-003',
+        map_type: 'normal',
+        slots: { slot_1: 'village', slot_5: 'church', slot_9: 'sorcerer_rise' },
         nightlord: 'Tricephalos',
-        difficulty: 'Medium',
-        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/normalIcon.webp'
+        difficulty: 'Medium'
     },
 
     // MOUNTAINTOP SEEDS
     {
-        id: 'MTN-001',
-        mapType: 'mountaintop',
-        spawn: 'West Spawn',
-        buildings: { 'North': 'church', 'East': 'sorcerer_rise', 'South': 'village' },
-        boss: 'Zamor Knight',
+        seed_id: 'MTN-001',
+        map_type: 'mountaintop',
+        slots: { slot_2: 'church', slot_4: 'sorcerer_rise', slot_6: 'village' },
         nightlord: 'Equilibrious Beast',
-        difficulty: 'Hard',
-        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/mountainIcon.webp'
+        difficulty: 'Hard'
     },
     {
-        id: 'MTN-002',
-        mapType: 'mountaintop',
-        spawn: 'North Spawn',
-        buildings: { 'Center': 'village', 'South': 'church', 'West': 'none' },
-        boss: 'Frost Dragon',
+        seed_id: 'MTN-002',
+        map_type: 'mountaintop',
+        slots: { slot_1: 'village', slot_3: 'church', slot_7: 'church' },
         nightlord: 'Darkdrift Knight',
-        difficulty: 'Hard',
-        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/mountainIcon.webp'
+        difficulty: 'Hard'
     },
 
     // NOKLATEO SEEDS
     {
-        id: 'NOK-001',
-        mapType: 'noklateo',
-        spawn: 'South Spawn',
-        buildings: { 'North': 'sorcerer_rise', 'East': 'church', 'West': 'village' },
-        boss: 'Mimic Tear',
+        seed_id: 'NOK-001',
+        map_type: 'noklateo',
+        slots: { slot_3: 'sorcerer_rise', slot_5: 'church', slot_8: 'village' },
         nightlord: 'Augur',
-        difficulty: 'Very Hard',
-        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/noklateoIcon.webp'
+        difficulty: 'Very Hard'
     },
     {
-        id: 'NOK-002',
-        mapType: 'noklateo',
-        spawn: 'East Spawn',
-        buildings: { 'North': 'church', 'South': 'village', 'Center': 'sorcerer_rise' },
-        boss: 'Dragonkin Soldier',
+        seed_id: 'NOK-002',
+        map_type: 'noklateo',
+        slots: { slot_1: 'church', slot_4: 'village', slot_9: 'sorcerer_rise' },
         nightlord: 'Heolstor',
-        difficulty: 'Very Hard',
-        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/noklateoIcon.webp'
+        difficulty: 'Very Hard'
     },
 
     // ROTTED WOODS SEEDS
     {
-        id: 'ROT-001',
-        mapType: 'rotted_woods',
-        spawn: 'North Spawn',
-        buildings: { 'East': 'church', 'South': 'sorcerer_rise', 'West': 'village' },
-        boss: 'Cleanrot Knight',
+        seed_id: 'ROT-001',
+        map_type: 'rotted',
+        slots: { slot_2: 'church', slot_6: 'sorcerer_rise', slot_8: 'village' },
         nightlord: 'Fissure in the Fog',
-        difficulty: 'Extreme',
-        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/rotIcon.webp'
+        difficulty: 'Extreme'
     },
     {
-        id: 'ROT-002',
-        mapType: 'rotted_woods',
-        spawn: 'West Spawn',
-        buildings: { 'North': 'village', 'Center': 'church', 'East': 'none' },
-        boss: 'Kindred of Rot',
+        seed_id: 'ROT-002',
+        map_type: 'rotted',
+        slots: { slot_1: 'village', slot_5: 'church', slot_7: 'church' },
         nightlord: 'Gnoster',
-        difficulty: 'Hard',
-        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/rotIcon.webp'
+        difficulty: 'Hard'
     },
 
     // CRATER SEEDS
     {
-        id: 'CRT-001',
-        mapType: 'crater',
-        spawn: 'East Spawn',
-        buildings: { 'North': 'church', 'South': 'sorcerer_rise', 'West': 'village' },
-        boss: 'Godskin Apostle',
-        nightlord: 'The Shape of Night',
-        difficulty: 'Extreme',
-        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/craterIcon.webp'
+        seed_id: 'CRT-001',
+        map_type: 'crater',
+        slots: { slot_3: 'church', slot_4: 'sorcerer_rise', slot_9: 'village' },
+        nightlord: 'Night Aspect',
+        difficulty: 'Extreme'
     },
     {
-        id: 'CRT-002',
-        mapType: 'crater',
-        spawn: 'South Spawn',
-        buildings: { 'Center': 'church', 'North': 'village', 'East': 'sorcerer_rise' },
-        boss: 'Draconic Tree Sentinel',
+        seed_id: 'CRT-002',
+        map_type: 'crater',
+        slots: { slot_2: 'church', slot_6: 'village', slot_8: 'sorcerer_rise' },
         nightlord: 'Darkdrift Knight',
-        difficulty: 'Extreme',
-        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/craterIcon.webp'
+        difficulty: 'Extreme'
     },
 
     // GREAT HOLLOW SEEDS
     {
-        id: 'GHL-001',
-        mapType: 'great_hollow',
-        spawn: 'North Spawn',
-        buildings: { 'South': 'church', 'East': 'village', 'West': 'sorcerer_rise' },
-        boss: 'Abductor Virgin',
+        seed_id: 'GHL-001',
+        map_type: 'greatHollow',
+        slots: { slot_1: 'church', slot_5: 'village', slot_7: 'sorcerer_rise' },
         nightlord: 'Gaping Jaw',
-        difficulty: 'Hard',
-        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/greatHollowIcon.webp'
+        difficulty: 'Hard'
     },
     {
-        id: 'GHL-002',
-        mapType: 'great_hollow',
-        spawn: 'West Spawn',
-        buildings: { 'North': 'sorcerer_rise', 'Center': 'village', 'South': 'church' },
-        boss: 'Magma Wyrm',
+        seed_id: 'GHL-002',
+        map_type: 'greatHollow',
+        slots: { slot_3: 'sorcerer_rise', slot_4: 'village', slot_9: 'church' },
         nightlord: 'Tricephalos',
-        difficulty: 'Medium',
-        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/greatHollowIcon.webp'
+        difficulty: 'Medium'
     },
 ];
 
 const mapNames = {
-    mountaintop: 'Mountaintop of the Giants',
-    noklateo: 'Noklateo, Eternal City',
-    normal: 'Limgrave (Normal)',
-    rotted_woods: 'Caelid Rotted Woods',
-    crater: 'Crumbling Farum Azula',
-    great_hollow: 'Mt. Gelmir Great Hollow'
+    mountaintop: 'Mountaintop',
+    noklateo: 'Noklateo',
+    normal: 'Normal',
+    rotted: 'Rotted Woods',
+    crater: 'Crater',
+    greatHollow: 'Great Hollow'
 };
 
 // Store active seed finder sessions (in-memory)
-// userId -> { mapType, spawn, buildings: {}, boss }
+// userId -> { map_type, selectedSlots: {slot_id: building_type}, nightlord }
 const finderSessions = new Map();
 
 // Initialize a new seed finder session
 function createFinderSession(userId, mapType) {
     finderSessions.set(userId, {
-        mapType,
-        spawn: null,
-        buildings: {}, // location -> building type
-        boss: null
+        map_type: mapType,
+        selectedSlots: {}, // slot_id -> building_type
+        nightlord: null
     });
 }
 
@@ -204,55 +151,58 @@ function getSession(userId) {
     return finderSessions.get(userId);
 }
 
-// Update session with spawn selection
-function setSpawn(userId, spawn) {
+// Set building at a specific slot
+function setSlot(userId, slotId, buildingType) {
     const session = getSession(userId);
-    if (session) session.spawn = spawn;
+    if (session) {
+        session.selectedSlots[slotId] = buildingType;
+    }
 }
 
-// Update session with building at location
-function setBuilding(userId, location, buildingType) {
+// Set nightlord selection
+function setNightlord(userId, nightlord) {
     const session = getSession(userId);
-    if (session) session.buildings[location] = buildingType;
+    if (session) session.nightlord = nightlord;
 }
 
-// Update session with boss selection
-function setBoss(userId, boss) {
+// Clear a slot
+function clearSlot(userId, slotId) {
     const session = getSession(userId);
-    if (session) session.boss = boss;
+    if (session && session.selectedSlots[slotId]) {
+        delete session.selectedSlots[slotId];
+    }
 }
 
-// Clear session
+// Clear entire session
 function clearSession(userId) {
-    finderSessions.delete(userId);
+    const session = getSession(userId);
+    if (session) {
+        session.selectedSlots = {};
+        session.nightlord = null;
+    }
 }
 
-// Filter seeds based on session data (spawn, buildings, boss)
+// Find matching seeds based on selected slots
 function findMatchingSeeds(session) {
-    if (!session || !session.mapType) return [];
+    if (!session || !session.map_type) return [];
     
-    let matches = nightreignSeeds.filter(s => s.mapType === session.mapType);
+    let matches = nightreignSeeds.filter(s => s.map_type === session.map_type);
     
-    // Filter by spawn if selected
-    if (session.spawn) {
-        matches = matches.filter(s => s.spawn === session.spawn);
+    // Filter by nightlord if selected
+    if (session.nightlord) {
+        matches = matches.filter(s => s.nightlord === session.nightlord);
     }
     
-    // Filter by buildings if any selected
-    if (Object.keys(session.buildings).length > 0) {
+    // Filter by selected slots - seed must have ALL selected buildings at those slots
+    if (Object.keys(session.selectedSlots).length > 0) {
         matches = matches.filter(seed => {
-            for (const [location, buildingType] of Object.entries(session.buildings)) {
-                if (seed.buildings[location] !== buildingType) {
+            for (const [slotId, buildingType] of Object.entries(session.selectedSlots)) {
+                if (seed.slots[slotId] !== buildingType) {
                     return false;
                 }
             }
             return true;
         });
-    }
-    
-    // Filter by boss if selected
-    if (session.boss) {
-        matches = matches.filter(s => s.boss === session.boss);
     }
     
     return matches;
@@ -263,9 +213,9 @@ function createMapSelectionEmbed() {
     const embed = new EmbedBuilder()
         .setColor(0xFFD700)
         .setTitle('🗺️ Nightreign Seed Finder')
-        .setDescription('**Elden Ring: Nightreign** - Find your exact seed!\n\nIdentify your seed in 3 simple steps:\n1️⃣ Select your spawn location\n2️⃣ Mark building locations on the map\n3️⃣ Select which boss you encountered\n\nChoose your map type to begin:')
+        .setDescription('**Elden Ring: Nightreign** - Find your exact seed!\n\nMatch building locations on the map to identify your seed.\n\n✅ Select a map type to begin marking slots.')
         .setImage('https://artimuz.github.io/Nightreign-Seed-Finder/Images/logo_header.webp')
-        .setFooter({ text: 'Only 3 data points needed to identify your seed!' })
+        .setFooter({ text: 'Interactive seed finder • Match 3+ slots for accurate results' })
         .setTimestamp();
 
     return embed;
@@ -275,42 +225,42 @@ function createMapSelectionEmbed() {
 function createMapSelectMenu() {
     const selectMenu = new StringSelectMenuBuilder()
         .setCustomId('nightreign_map_select')
-        .setPlaceholder('Choose a map type...')
+        .setPlaceholder('Choose your map type...')
         .addOptions([
             {
-                label: 'Normal (Limgrave)',
-                description: 'Starting area - Easy difficulty',
+                label: 'Normal',
+                description: 'Starting area - Easy',
                 value: 'normal',
                 emoji: '🌲'
             },
             {
-                label: 'Mountaintop of the Giants',
-                description: 'Endgame frozen peaks - Hard',
+                label: 'Mountaintop',
+                description: 'Frozen peaks - Hard',
                 value: 'mountaintop',
                 emoji: '🏔️'
             },
             {
-                label: 'Noklateo, Eternal City',
-                description: 'Underground realm - Very Hard',
+                label: 'Noklateo',
+                description: 'Eternal city - Very Hard',
                 value: 'noklateo',
                 emoji: '🌙'
             },
             {
-                label: 'Caelid Rotted Woods',
-                description: 'Scarlet rot wasteland - Extreme',
-                value: 'rotted_woods',
+                label: 'Rotted Woods',
+                description: 'Scarlet rot - Extreme',
+                value: 'rotted',
                 emoji: '🍄'
             },
             {
-                label: 'Crumbling Farum Azula',
+                label: 'Crater',
                 description: 'Floating ruins - Extreme',
                 value: 'crater',
                 emoji: '⚡'
             },
             {
-                label: 'Mt. Gelmir Great Hollow',
+                label: 'Great Hollow',
                 description: 'Volcanic region - Hard',
-                value: 'great_hollow',
+                value: 'greatHollow',
                 emoji: '🌋'
             }
         ]);
@@ -318,36 +268,39 @@ function createMapSelectMenu() {
     return new ActionRowBuilder().addComponents(selectMenu);
 }
 
-// Create seed finder interface showing current progress
+// Create finder interface showing current selections
 function createFinderEmbed(userId) {
     const session = getSession(userId);
     if (!session) return null;
     
-    const { mapType, spawn, buildings, boss } = session;
+    const { map_type, selectedSlots, nightlord } = session;
     const matches = findMatchingSeeds(session);
+    
+    // Display selected slots
+    let slotDisplay = '';
+    if (Object.keys(selectedSlots).length > 0) {
+        for (const [slotId, buildingType] of Object.entries(selectedSlots)) {
+            const building = buildingTypes[buildingType];
+            const slotNum = slotId.replace('slot_', '');
+            slotDisplay += `**Slot ${slotNum}:** ${building.emoji} ${building.name}\n`;
+        }
+    } else {
+        slotDisplay = '❓ No slots marked yet';
+    }
     
     const embed = new EmbedBuilder()
         .setColor(0x5865F2)
-        .setTitle(`🗺️ ${mapNames[mapType]}`)
-        .setDescription('**Mark your findings to identify the seed:**')
+        .setTitle(`🗺️ ${mapNames[map_type]} - Seed Finder`)
+        .setDescription('**Mark building locations to find your seed:**\n\nClick slot buttons to mark buildings on the map.')
         .addFields(
             {
-                name: '1️⃣ Spawn Location',
-                value: spawn || '❓ Not selected',
+                name: '🏛️ Marked Slots',
+                value: slotDisplay,
                 inline: false
             },
             {
-                name: '2️⃣ Buildings Found',
-                value: Object.keys(buildings).length > 0 
-                    ? Object.entries(buildings).map(([loc, type]) => 
-                        `${buildingTypes[type].emoji} ${buildingTypes[type].name} at **${loc}**`
-                      ).join('\n')
-                    : '❓ None marked yet',
-                inline: false
-            },
-            {
-                name: '3️⃣ Boss Encountered',
-                value: boss || '❓ Not selected',
+                name: '👑 Nightlord (Optional)',
+                value: nightlord || '❓ Not selected',
                 inline: false
             },
             {
@@ -356,49 +309,79 @@ function createFinderEmbed(userId) {
                 inline: false
             }
         )
-        .setFooter({ text: 'Use the buttons below to mark your findings' });
+        .setFooter({ text: `Mark at least 3 slots for accurate results • ${Object.keys(selectedSlots).length}/9 slots marked` });
     
     return embed;
 }
 
-// Create spawn selection buttons
-function createSpawnButtons() {
-    const buttons = spawnLocations.map(spawn => 
-        new ButtonBuilder()
-            .setCustomId(`nightreign_spawn_${spawn.replace(' ', '_')}`)
-            .setLabel(spawn)
-            .setStyle(ButtonStyle.Primary)
-            .setEmoji('📍')
-    );
-    
-    // Split into rows (max 5 per row)
-    const row = new ActionRowBuilder().addComponents(buttons);
-    return [row];
-}
-
-// Create location selection buttons for marking buildings
-function createLocationButtons() {
+// Create slot selection buttons (9 slots in 3 rows)
+function createSlotButtons() {
     const rows = [];
-    let currentRow = [];
     
-    mapLocations.forEach((location, index) => {
-        currentRow.push(
-            new ButtonBuilder()
-                .setCustomId(`nightreign_location_${location}`)
-                .setLabel(location)
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('📍')
-        );
-        
-        // Create new row after 5 buttons or at end
-        if (currentRow.length === 5 || index === mapLocations.length - 1) {
-            rows.push(new ActionRowBuilder().addComponents(currentRow));
-            currentRow = [];
-        }
-    });
-    
-    // Add control buttons
+    // Row 1: Slots 1-3
     rows.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('nightreign_slot_1')
+            .setLabel('Slot 1')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('1️⃣'),
+        new ButtonBuilder()
+            .setCustomId('nightreign_slot_2')
+            .setLabel('Slot 2')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('2️⃣'),
+        new ButtonBuilder()
+            .setCustomId('nightreign_slot_3')
+            .setLabel('Slot 3')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('3️⃣')
+    ));
+    
+    // Row 2: Slots 4-6
+    rows.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('nightreign_slot_4')
+            .setLabel('Slot 4')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('4️⃣'),
+        new ButtonBuilder()
+            .setCustomId('nightreign_slot_5')
+            .setLabel('Slot 5')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('5️⃣'),
+        new ButtonBuilder()
+            .setCustomId('nightreign_slot_6')
+            .setLabel('Slot 6')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('6️⃣')
+    ));
+    
+    // Row 3: Slots 7-9
+    rows.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('nightreign_slot_7')
+            .setLabel('Slot 7')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('7️⃣'),
+        new ButtonBuilder()
+            .setCustomId('nightreign_slot_8')
+            .setLabel('Slot 8')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('8️⃣'),
+        new ButtonBuilder()
+            .setCustomId('nightreign_slot_9')
+            .setLabel('Slot 9')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('9️⃣')
+    ));
+    
+    // Row 4: Control buttons
+    rows.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('nightreign_select_nightlord')
+            .setLabel('Select Nightlord')
+            .setStyle(ButtonStyle.Primary)
+            .setEmoji('👑'),
         new ButtonBuilder()
             .setCustomId('nightreign_view_results')
             .setLabel('View Results')
@@ -414,11 +397,11 @@ function createLocationButtons() {
     return rows;
 }
 
-// Create building type selection menu for a location
-function createBuildingSelectMenu(location) {
+// Create building selection menu for a slot
+function createBuildingSelectMenu(slotNum) {
     const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId(`nightreign_building_${location}`)
-        .setPlaceholder(`Select building at ${location}...`)
+        .setCustomId(`nightreign_building_slot_${slotNum}`)
+        .setPlaceholder(`Select building for Slot ${slotNum}...`)
         .addOptions([
             {
                 label: 'Church',
@@ -439,28 +422,28 @@ function createBuildingSelectMenu(location) {
                 emoji: '🗼'
             },
             {
-                label: 'None / Empty',
-                description: 'No building at this location',
-                value: 'none',
-                emoji: '⚫'
+                label: 'Clear Slot',
+                description: 'Remove building from this slot',
+                value: 'clear',
+                emoji: '❌'
             }
         ]);
     
     return new ActionRowBuilder().addComponents(selectMenu);
 }
 
-// Create boss selection menu
-function createBossSelectMenu() {
-    const options = bossEncounters.map(boss => ({
-        label: boss,
-        value: boss,
-        emoji: '⚔️'
-    }));
-    
+// Create nightlord selection menu
+function createNightlordSelectMenu() {
     const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId('nightreign_boss_select')
-        .setPlaceholder('Select which boss you encountered...')
-        .addOptions(options);
+        .setCustomId('nightreign_nightlord_select')
+        .setPlaceholder('Select nightlord (optional)...')
+        .addOptions(
+            nightlords.map(nl => ({
+                label: nl,
+                value: nl,
+                emoji: '⚔️'
+            }))
+        );
     
     return new ActionRowBuilder().addComponents(selectMenu);
 }
@@ -473,26 +456,33 @@ function createResultsEmbed(session, page = 0) {
         return new EmbedBuilder()
             .setColor(0xFF0000)
             .setTitle('❌ No Matching Seeds')
-            .setDescription('No seeds match your criteria. Try adjusting your selections.')
-            .setFooter({ text: 'Double-check your spawn, buildings, and boss' });
+            .setDescription('No seeds match your slot configuration.\n\nTry:\n• Removing some slots\n• Changing building types\n• Selecting a different map')
+            .setFooter({ text: 'Tip: Mark fewer slots for more results' });
     }
     
     const seed = matches[page];
-    const buildingList = Object.entries(seed.buildings)
-        .map(([loc, type]) => `${buildingTypes[type].emoji} **${buildingTypes[type].name}** at ${loc}`)
-        .join('\n');
+    
+    // Display all slots in the seed
+    let slotList = '';
+    for (let i = 1; i <= 9; i++) {
+        const slotId = `slot_${i}`;
+        const building = seed.slots[slotId];
+        if (building) {
+            const b = buildingTypes[building];
+            slotList += `**Slot ${i}:** ${b.emoji} ${b.name}\n`;
+        }
+    }
+    
+    if (!slotList) slotList = 'No specific buildings';
     
     const embed = new EmbedBuilder()
         .setColor(0x00FF00)
-        .setTitle(`🎯 Seed Match: ${seed.id}`)
-        .setDescription(`**Nightlord:** ${seed.nightlord}\n**Difficulty:** ${seed.difficulty}`)
+        .setTitle(`🎯 Seed: ${seed.seed_id}`)
+        .setDescription(`**Map:** ${mapNames[seed.map_type]}\n**Difficulty:** ${seed.difficulty}\n**Nightlord:** ${seed.nightlord}`)
         .addFields(
-            { name: '📍 Spawn', value: seed.spawn, inline: true },
-            { name: '⚔️ Boss', value: seed.boss, inline: true },
-            { name: '🏛️ Buildings', value: buildingList || 'None', inline: false }
+            { name: '🏛️ Building Locations', value: slotList, inline: false }
         )
-        .setThumbnail(seed.imageUrl)
-        .setFooter({ text: `Seed ${page + 1} of ${matches.length}` });
+        .setFooter({ text: `Result ${page + 1} of ${matches.length} • Use arrows to browse` });
     
     return embed;
 }
@@ -524,22 +514,22 @@ function createResultsButtons(currentPage, totalResults) {
 module.exports = {
     buildingTypes,
     mapNames,
-    bossEncounters,
-    mapLocations,
-    spawnLocations,
+    nightlords,
+    mapSlots,
     createFinderSession,
     getSession,
-    setSpawn,
-    setBuilding,
-    setBoss,
+    setSlot,
+    setNightlord,
+    clearSlot,
     clearSession,
     findMatchingSeeds,
     createMapSelectionEmbed,
     createMapSelectMenu,
     createFinderEmbed,
-    createSpawnButtons,
-    createLocationButtons,
+    createSlotButtons,
     createBuildingSelectMenu,
-    createBossSelectMenu,
+    createNightlordSelectMenu,
+    createResultsEmbed,
+    createResultsButtons
 };
 
