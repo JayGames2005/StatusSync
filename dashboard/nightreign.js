@@ -66,9 +66,62 @@ slotPositions.rotted = slotPositions.normal;
 slotPositions.crater = slotPositions.normal;
 
 const buildingTypes = {
+    // Base buildings
     church: { name: 'Church', emoji: '⛪', color: '#FAA61A' },
-    village: { name: 'Village', emoji: '🏘️', color: '#3BA55D' },
-    sorcerer_rise: { name: "Sorcerer's Rise", emoji: '🗼', color: '#5865F2' }
+    church_spawn: { name: 'Church (Spawn)', emoji: '⛪', color: '#FAA61A' },
+    sorcerers: { name: "Sorcerer's Rise", emoji: '🗼', color: '#5865F2' },
+    township: { name: 'Township', emoji: '🏘️', color: '#3BA55D' },
+    greatchurch: { name: 'Great Church', emoji: '⛪', color: '#FFD700' },
+    fort: { name: 'Fort', emoji: '🏰', color: '#E67E22' },
+    mainencampment: { name: 'Main Encampment', emoji: '⛺', color: '#1ABC9C' },
+    ruins: { name: 'Ruins', emoji: '🏚️', color: '#95A5A6' },
+    
+    // Elemental variants
+    greatchurch_fire: { name: 'Great Church (Fire)', emoji: '🔥', color: '#FF6347' },
+    greatchurch_holy: { name: 'Great Church (Holy)', emoji: '✨', color: '#FFD700' },
+    greatchurch_eletric: { name: 'Great Church (Electric)', emoji: '⚡', color: '#00CED1' },
+    greatchurch_frostbite: { name: 'Great Church (Frostbite)', emoji: '❄️', color: '#87CEEB' },
+    greatchurch_sleep: { name: 'Great Church (Sleep)', emoji: '💤', color: '#9370DB' },
+    
+    fort_magic: { name: 'Fort (Magic)', emoji: '🔮', color: '#9B59B6' },
+    
+    mainencampment_fire: { name: 'Main Encampment (Fire)', emoji: '🔥', color: '#FF6347' },
+    mainencampment_eletric: { name: 'Main Encampment (Electric)', emoji: '⚡', color: '#00CED1' },
+    mainencampment_madness: { name: 'Main Encampment (Madness)', emoji: '😵', color: '#8B008B' },
+    
+    ruins_poison: { name: 'Ruins (Poison)', emoji: '☠️', color: '#32CD32' },
+    ruins_frostbite: { name: 'Ruins (Frostbite)', emoji: '❄️', color: '#87CEEB' },
+    ruins_blight: { name: 'Ruins (Blight)', emoji: '🍄', color: '#FF1493' },
+    ruins_bleed: { name: 'Ruins (Bleed)', emoji: '🩸', color: '#DC143C' },
+    ruins_eletric: { name: 'Ruins (Electric)', emoji: '⚡', color: '#00CED1' },
+    ruins_magic: { name: 'Ruins (Magic)', emoji: '🔮', color: '#9B59B6' },
+    ruins_sleep: { name: 'Ruins (Sleep)', emoji: '💤', color: '#9370DB' },
+    ruins_holy: { name: 'Ruins (Holy)', emoji: '✨', color: '#FFD700' },
+    
+    // Update 1.0 buildings
+    forge: { name: 'Forge', emoji: '⚒️', color: '#CD853F' },
+    forge_fire: { name: 'Forge (Fire)', emoji: '🔥', color: '#FF6347' },
+    forge_poison: { name: 'Forge (Poison)', emoji: '☠️', color: '#32CD32' },
+    forge_eletric: { name: 'Forge (Electric)', emoji: '⚡', color: '#00CED1' },
+    forge_holy: { name: 'Forge (Holy)', emoji: '✨', color: '#FFD700' },
+    forge_bleed: { name: 'Forge (Bleed)', emoji: '🩸', color: '#DC143C' },
+    
+    marsh_poison: { name: 'Marsh (Poison)', emoji: '🌿', color: '#32CD32' },
+    marsh_bleed: { name: 'Marsh (Bleed)', emoji: '🩸', color: '#DC143C' },
+    marsh_rot: { name: 'Marsh (Rot)', emoji: '🍄', color: '#8B4513' },
+    marsh_frostbite: { name: 'Marsh (Frostbite)', emoji: '❄️', color: '#87CEEB' },
+    marsh_madness: { name: 'Marsh (Madness)', emoji: '😵', color: '#8B008B' },
+    marsh_sleep: { name: 'Marsh (Sleep)', emoji: '💤', color: '#9370DB' },
+    
+    // Great Hollow special
+    WUF_magic: { name: 'West Upper Floor (Magic)', emoji: '🔮', color: '#9B59B6' },
+    WUF_fire: { name: 'West Upper Floor (Fire)', emoji: '🔥', color: '#FF6347' },
+    EUF_holy: { name: 'East Upper Floor (Holy)', emoji: '✨', color: '#FFD700' },
+    EUF_rot: { name: 'East Upper Floor (Rot)', emoji: '🍄', color: '#8B4513' },
+    ScaleBearingMerchant: { name: 'Scale-Bearing Merchant', emoji: '💰', color: '#FFD700' },
+    
+    // Special
+    empty_spawn: { name: 'Empty (Spawn)', emoji: '⭕', color: '#999999' }
 };
 
 // Select map type
@@ -248,13 +301,30 @@ function updateMatchCount() {
 function findMatchingSeeds() {
     if (!currentMap) return [];
     
-    let matches = nightreignSeeds.filter(seed => seed.map_type === currentMap);
+    // Normalize map type to match seed data (e.g., "normal" -> "Normal")
+    const mapTypeNormalized = {
+        'normal': 'Normal',
+        'mountaintop': 'Mountaintop',
+        'noklateo': 'Noklateo',
+        'rotted': 'Rotted',
+        'crater': 'Crater',
+        'greatHollow': 'Great Hollow'
+    }[currentMap] || currentMap;
     
-    // Filter by marked slots
+    let matches = nightreignSeeds.filter(seed => {
+        const seedMapNormalized = seed.map_type === 'Great Hollow' ? 'Great Hollow' : seed.map_type;
+        return seedMapNormalized === mapTypeNormalized;
+    });
+    
+    // Filter by marked slots - convert slot IDs to match seed data format
     if (Object.keys(markedSlots).length > 0) {
         matches = matches.filter(seed => {
             for (const [slotId, buildingType] of Object.entries(markedSlots)) {
-                if (seed.slots[slotId] !== buildingType) {
+                // Convert "slot_1" to "1" to match seed data
+                const normalizedSlotId = slotId.replace('slot_', '');
+                
+                // Check if seed has this building at this slot
+                if (seed.slots[normalizedSlotId] !== buildingType) {
                     return false;
                 }
             }
@@ -288,51 +358,54 @@ async function searchSeeds() {
         return;
     }
     
-    resultsDiv.innerHTML = '<h3 style="margin-bottom: 20px;">🎯 Found Seeds</h3>';
+    resultsDiv.innerHTML = '<h3 style="margin-bottom: 20px;">🎯 Found Seeds (' + matches.length + ' results)</h3>';
     
-    matches.forEach(seed => {
-        const slotsHtml = Object.entries(seed.slots)
-            .sort(([a], [b]) => parseInt(a.split('_')[1]) - parseInt(b.split('_')[1]))
-            .map(([slotId, buildingType]) => {
-                const slotNum = slotId.replace('slot_', '');
-                const building = buildingTypes[buildingType];
-                return `<span style="margin-right: 12px;"><strong>Slot ${slotNum}:</strong> ${building.emoji} ${building.name}</span>`;
-            })
-            .join('<br>');
+    matches.slice(0, 50).forEach(seed => {
+        // Convert seed slots from {"1": "church", "2": "fort"} format
+        const slotEntries = Object.entries(seed.slots)
+            .filter(([_, building]) => building && building !== '')
+            .sort(([a], [b]) => parseInt(a) - parseInt(b));
         
-        const bossesHtml = seed.additional_bosses?.join(', ') || 'TBA';
-        const itemsHtml = seed.items?.join(', ') || 'TBA';
+        const slotsHtml = slotEntries.map(([slotId, buildingType]) => {
+                const building = buildingTypes[buildingType] || { emoji: '❓', name: buildingType };
+                return `<span style="margin-right: 12px;"><strong>Slot ${slotId}:</strong> ${building.emoji} ${building.name}</span>`;
+            }).join('<br>') || 'No specific buildings';
         
-        const difficultyClass = `difficulty-${seed.difficulty.replace(' ', '.')}`;
+        // Parse nightlord (e.g., "1_Gladius" -> "Gladius")
+        const nightlordName = seed.nightlord ? seed.nightlord.split('_')[1] || seed.nightlord : 'Unknown';
+        
+        // Event info
+        const eventHtml = seed.Event ? `<div class="seed-meta-item"><strong>🌟 Event</strong> ${seed.Event}</div>` : '';
         
         resultsDiv.innerHTML += `
             <div class="seed-result">
                 <h3>🎯 Seed: ${seed.seed_id}</h3>
                 <div class="seed-meta">
                     <div class="seed-meta-item">
-                        <strong>Difficulty</strong>
-                        <span class="${difficultyClass}">${seed.difficulty}</span>
+                        <strong>Nightlord</strong>
+                        👑 ${nightlordName}
                     </div>
                     <div class="seed-meta-item">
-                        <strong>Nightlord</strong>
-                        ${seed.nightlord}
+                        <strong>Map Type</strong>
+                        ${seed.map_type}
                     </div>
                 </div>
+                ${eventHtml}
                 <div class="seed-meta-item" style="margin-bottom: 10px;">
-                    <strong>Building Locations</strong>
+                    <strong>🏛️ Building Locations (${slotEntries.length} slots)</strong><br>
                     ${slotsHtml}
-                </div>
-                <div class="seed-meta-item" style="margin-bottom: 10px;">
-                    <strong>⚔️ Other Bosses</strong>
-                    ${bossesHtml}
-                </div>
-                <div class="seed-meta-item">
-                    <strong>💎 Notable Items</strong>
-                    ${itemsHtml}
                 </div>
             </div>
         `;
     });
+    
+    if (matches.length > 50) {
+        resultsDiv.innerHTML += `
+            <div class="card" style="text-align: center; padding: 20px; margin-top: 20px;">
+                <p style="color: #B9BBBE;">Showing first 50 of ${matches.length} results. Mark more slots to narrow down the search.</p>
+            </div>
+        `;
+    }
     
     // Scroll to results
     resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
