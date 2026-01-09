@@ -626,7 +626,8 @@ async function savePremiumSettings() {
 async function loadBackups() {
     try {
         const guildId = document.getElementById('guild-select').value;
-        const backups = await apiRequest(`/dashboard/api/backup/list?guild_id=${guildId}`);
+        const backups = await fetch(`/dashboard/api/backup/list?guild_id=${guildId}`, { credentials: 'include' })
+            .then(r => r.json());
         
         const backupList = document.getElementById('backup-list');
         
@@ -725,7 +726,8 @@ async function restoreBackup(backupId) {
 async function loadAutoModRules() {
     try {
         const guildId = document.getElementById('guild-select').value;
-        const rules = await apiRequest(`/dashboard/api/automod/rules?guild_id=${guildId}`);
+        const rules = await fetch(`/dashboard/api/automod/rules?guild_id=${guildId}`, { credentials: 'include' })
+            .then(r => r.json());
         
         // Create a map for easy access
         const rulesMap = {};
@@ -839,7 +841,8 @@ async function saveAutoModRules() {
 async function loadAutoModViolations() {
     try {
         const guildId = document.getElementById('guild-select').value;
-        const violations = await apiRequest(`/dashboard/api/automod/violations?guild_id=${guildId}&limit=10`);
+        const violations = await fetch(`/dashboard/api/automod/violations?guild_id=${guildId}&limit=10`, { credentials: 'include' })
+            .then(r => r.json());
         
         const violationsDiv = document.getElementById('automod-violations');
         
