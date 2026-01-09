@@ -260,7 +260,6 @@ async function takeAction(message, violation) {
 
 // Main auto-mod check
 async function checkMessage(message, isPremium) {
-    if (!isPremium) return; // Premium feature only
     if (message.author.bot) return;
     if (!message.guild) return;
     if (message.member?.permissions.has('Administrator')) return; // Skip admins

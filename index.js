@@ -295,6 +295,38 @@ const commands = [
         .setName('dashboard')
         .setDescription('Get the link to the StatusSync dashboard'),
     new SlashCommandBuilder()
+        .setName('automod')
+        .setDescription('Configure auto-moderation rules')
+        .addStringOption(option =>
+            option.setName('rule')
+                .setDescription('Rule type to configure')
+                .setRequired(true)
+                .addChoices(
+                    { name: 'Spam Detection', value: 'spam' },
+                    { name: 'Bad Words Filter', value: 'bad_words' },
+                    { name: 'Link Blocking', value: 'links' },
+                    { name: 'Caps Lock Detection', value: 'caps' }
+                )
+        )
+        .addBooleanOption(option => option.setName('enabled').setDescription('Enable or disable this rule').setRequired(true))
+        .addStringOption(option =>
+            option.setName('action')
+                .setDescription('Action to take when rule is triggered')
+                .setRequired(false)
+                .addChoices(
+                    { name: 'Warn', value: 'warn' },
+                    { name: 'Delete Message', value: 'delete' },
+                    { name: 'Timeout (5min)', value: 'timeout' },
+                    { name: 'Kick', value: 'kick' }
+                )
+        )
+        .addIntegerOption(option => option.setName('threshold').setDescription('Threshold (for spam/caps rules)').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
+        .setName('automodstatus')
+        .setDescription('View current auto-moderation rules')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
         .setName('premium')
         .setDescription('Check your server\'s premium status'),
     new SlashCommandBuilder()
@@ -1856,6 +1888,87 @@ app.listen(PORT, () => {
             return;
         }
 
+        if (commandName === 'automod') {
+            try {
+                const automod = require('./automod');
+                const rule = interaction.options.getString('rule');
+                const enabled = interaction.options.getBoolean('enabled');
+                const action = interaction.options.getString('action') || 'warn';
+                const threshold = interaction.options.getInteger('threshold') || (rule === 'spam' ? 5 : 70);
+                
+                // Set the rule
+                await automod.setRule(interaction.guild.id, rule, enabled, action, threshold, {});
+                
+                const ruleNames = {
+                    spam: '🚫 Spam Detection',
+                    bad_words: '🤬 Bad Words Filter',
+                    links: '🔗 Link Blocking',
+                    caps: '🔠 Caps Lock Detection'
+                };
+                
+                const embed = {
+                    color: enabled ? 0x3ba55d : 0xed4245,
+                    title: '🛡️ Auto-Moderation Updated',
+                    description: `**${ruleNames[rule]}** has been ${enabled ? 'enabled' : 'disabled'}.`,
+                    fields: [
+                        { name: 'Action', value: action, inline: true },
+                        { name: 'Threshold', value: threshold.toString(), inline: true }
+                    ],
+                    footer: { text: 'Use /automodstatus to see all rules' },
+                    timestamp: new Date()
+                };
+                
+                await interaction.reply({ embeds: [embed] });
+            } catch (err) {
+                console.error('Error setting automod rule:', err);
+                await interaction.reply({ content: 'Error configuring auto-moderation: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'automodstatus') {
+            try {
+                const automod = require('./automod');
+                const rules = await automod.getRules(interaction.guild.id);
+                
+                const ruleNames = {
+                    spam: '🚫 Spam Detection',
+                    bad_words: '🤬 Bad Words Filter',
+                    links: '🔗 Link Blocking',
+                    caps: '🔠 Caps Lock Detection'
+                };
+                
+                if (rules.length === 0) {
+                    await interaction.reply({
+                        content: '⚠️ No auto-moderation rules configured yet.\nUse `/automod` to set up rules.',
+                        flags: 64
+                    });
+                    return;
+                }
+                
+                const fields = rules.map(rule => ({
+                    name: ruleNames[rule.rule_type] || rule.rule_type,
+                    value: `Status: ${rule.enabled ? '✅ Enabled' : '❌ Disabled'}\nAction: ${rule.action}\nThreshold: ${rule.threshold}`,
+                    inline: true
+                }));
+                
+                const embed = {
+                    color: 0x5865F2,
+                    title: '🛡️ Auto-Moderation Status',
+                    description: 'Current auto-moderation rules for this server',
+                    fields: fields,
+                    footer: { text: 'Use /automod to configure rules' },
+                    timestamp: new Date()
+                };
+                
+                await interaction.reply({ embeds: [embed] });
+            } catch (err) {
+                console.error('Error getting automod status:', err);
+                await interaction.reply({ content: 'Error getting auto-moderation status: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
         if (commandName === 'premium') {
             const premiumData = await checkPremium(interaction.guild.id);
             const logoUrl = process.env.DASHBOARD_URL || process.env.CALLBACK_URL?.replace('/dashboard/auth/callback', '') || 'https://statussync-production.up.railway.app';
@@ -3337,12 +3450,19 @@ app.listen(PORT, () => {
 
         if (message.author.bot) return; // Skip other bot messages
 
-        // === AUTO-MODERATION (Premium Feature) ===
-        const autoModEnabled = await getPremiumFeature(message.guild.id, 'auto_mod_enabled', false);
-        if (autoModEnabled) {
+        // === AUTO-MODERATION ===
+        try {
             const automod = require('./automod');
-            const premiumData = await checkPremium(message.guild.id);
-            await automod.checkMessage(message, premiumData.premium);
+            // Check if any automod rules are enabled for this guild
+            const rules = await automod.getRules(message.guild.id);
+            const hasEnabledRules = rules.some(rule => rule.enabled);
+            
+            if (hasEnabledRules) {
+                const premiumData = await checkPremium(message.guild.id);
+                await automod.checkMessage(message, premiumData.premium || true);
+            }
+        } catch (err) {
+            console.error('Auto-mod error:', err);
         }
 
         // === MESSAGE LOGGING ===
