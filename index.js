@@ -327,6 +327,58 @@ const commands = [
         .setDescription('View current auto-moderation rules')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
     new SlashCommandBuilder()
+        .setName('antinuke')
+        .setDescription('Configure anti-nuke protection')
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('enable')
+                .setDescription('Enable anti-nuke protection')
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('disable')
+                .setDescription('Disable anti-nuke protection')
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('whitelist')
+                .setDescription('Add a user to anti-nuke whitelist')
+                .addUserOption(option => option.setName('user').setDescription('User to whitelist').setRequired(true))
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('unwhitelist')
+                .setDescription('Remove a user from anti-nuke whitelist')
+                .addUserOption(option => option.setName('user').setDescription('User to remove').setRequired(true))
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('status')
+                .setDescription('View anti-nuke configuration')
+        )
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
+        .setName('joingate')
+        .setDescription('Configure join verification system')
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('enable')
+                .setDescription('Enable join verification')
+                .addChannelOption(option => option.setName('channel').setDescription('Verification channel').setRequired(true))
+                .addRoleOption(option => option.setName('role').setDescription('Role to give after verification').setRequired(true))
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('disable')
+                .setDescription('Disable join verification')
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('status')
+                .setDescription('View join gate configuration')
+        )
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
         .setName('premium')
         .setDescription('Check your server\'s premium status'),
     new SlashCommandBuilder()
@@ -758,6 +810,63 @@ app.listen(PORT, () => {
 
     // Handle slash commands
     client.on('interactionCreate', async (interaction) => {
+        // === BUTTON INTERACTIONS ===
+        if (interaction.isButton()) {
+            // Join Gate Verification Button
+            if (interaction.customId.startsWith('verify_')) {
+                const userId = interaction.customId.split('_')[1];
+                
+                if (interaction.user.id !== userId) {
+                    await interaction.reply({ content: '❌ This verification is not for you!', flags: 64 });
+                    return;
+                }
+                
+                try {
+                    const config = await db.query(
+                        'SELECT * FROM joingate_config WHERE guild_id = $1 AND enabled = true',
+                        [interaction.guild.id]
+                    );
+                    
+                    if (config.rows.length === 0) {
+                        await interaction.reply({ content: '❌ Join verification is not configured!', flags: 64 });
+                        return;
+                    }
+                    
+                    const role = interaction.guild.roles.cache.get(config.rows[0].role_id);
+                    const member = interaction.guild.members.cache.get(userId);
+                    
+                    if (role && member) {
+                        await member.roles.add(role);
+                        
+                        // Remove from pending
+                        await db.query(
+                            'DELETE FROM joingate_pending WHERE guild_id = $1 AND user_id = $2',
+                            [interaction.guild.id, userId]
+                        );
+                        
+                        await interaction.reply({
+                            content: '✅ You have been verified! Welcome to the server!',
+                            flags: 64
+                        });
+                        
+                        // Update the original message
+                        await interaction.message.edit({
+                            content: `~~${interaction.message.content}~~\n✅ Verified!`,
+                            components: []
+                        });
+                    } else {
+                        await interaction.reply({ content: '❌ Error verifying. Please contact an administrator.', flags: 64 });
+                    }
+                } catch (err) {
+                    console.error('Verification error:', err);
+                    await interaction.reply({ content: '❌ Error verifying: ' + err.message, flags: 64 });
+                }
+                return;
+            }
+        }
+        
+        if (!interaction.isChatInputCommand()) return;
+        
                         // /resetweeklyxp command (admin only)
                         if (interaction.commandName === 'resetweeklyxp') {
                             if (!interaction.member.permissions.has('Administrator')) {
@@ -1965,6 +2074,243 @@ app.listen(PORT, () => {
             } catch (err) {
                 console.error('Error getting automod status:', err);
                 await interaction.reply({ content: 'Error getting auto-moderation status: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'antinuke') {
+            const subcommand = interaction.options.getSubcommand();
+            
+            try {
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS antinuke_config (
+                        guild_id VARCHAR(32) PRIMARY KEY,
+                        enabled BOOLEAN DEFAULT true,
+                        whitelist TEXT[] DEFAULT ARRAY[]::TEXT[]
+                    )
+                `);
+                
+                if (subcommand === 'enable') {
+                    await db.query(
+                        `INSERT INTO antinuke_config (guild_id, enabled) VALUES ($1, true)
+                         ON CONFLICT (guild_id) DO UPDATE SET enabled = true`,
+                        [interaction.guild.id]
+                    );
+                    
+                    const embed = {
+                        color: 0x3ba55d,
+                        title: '🛡️ Anti-Nuke Protection Enabled',
+                        description: 'Server is now protected against:',
+                        fields: [
+                            { name: '🚫 Mass Channel Deletion', value: 'Detects and stops mass channel deletes', inline: true },
+                            { name: '🚫 Mass Bans', value: 'Prevents mass user banning', inline: true },
+                            { name: '🚫 Mass Kicks', value: 'Prevents mass user kicking', inline: true },
+                            { name: '🚫 Mass Role Deletion', value: 'Protects against role nuking', inline: true },
+                            { name: '🚫 Permission Changes', value: 'Monitors dangerous permission changes', inline: true },
+                            { name: '⚙️ Whitelist', value: 'Use `/antinuke whitelist` to add trusted users', inline: false }
+                        ],
+                        footer: { text: 'Anti-nuke will automatically ban malicious actors' },
+                        timestamp: new Date()
+                    };
+                    
+                    await interaction.reply({ embeds: [embed] });
+                    
+                } else if (subcommand === 'disable') {
+                    await db.query(
+                        `UPDATE antinuke_config SET enabled = false WHERE guild_id = $1`,
+                        [interaction.guild.id]
+                    );
+                    
+                    await interaction.reply({
+                        embeds: [{
+                            color: 0xed4245,
+                            title: '⚠️ Anti-Nuke Protection Disabled',
+                            description: 'Your server is no longer protected. Use `/antinuke enable` to re-enable.',
+                            timestamp: new Date()
+                        }]
+                    });
+                    
+                } else if (subcommand === 'whitelist') {
+                    const user = interaction.options.getUser('user');
+                    
+                    await db.query(
+                        `INSERT INTO antinuke_config (guild_id, whitelist) VALUES ($1, ARRAY[$2]::TEXT[])
+                         ON CONFLICT (guild_id) DO UPDATE SET whitelist = array_append(antinuke_config.whitelist, $2)`,
+                        [interaction.guild.id, user.id]
+                    );
+                    
+                    await interaction.reply({
+                        embeds: [{
+                            color: 0x3ba55d,
+                            description: `✅ ${user.tag} has been added to the anti-nuke whitelist.`,
+                            timestamp: new Date()
+                        }],
+                        flags: 64
+                    });
+                    
+                } else if (subcommand === 'unwhitelist') {
+                    const user = interaction.options.getUser('user');
+                    
+                    await db.query(
+                        `UPDATE antinuke_config SET whitelist = array_remove(whitelist, $2) WHERE guild_id = $1`,
+                        [interaction.guild.id, user.id]
+                    );
+                    
+                    await interaction.reply({
+                        embeds: [{
+                            color: 0xfaa61a,
+                            description: `✅ ${user.tag} has been removed from the anti-nuke whitelist.`,
+                            timestamp: new Date()
+                        }],
+                        flags: 64
+                    });
+                    
+                } else if (subcommand === 'status') {
+                    const result = await db.query(
+                        'SELECT * FROM antinuke_config WHERE guild_id = $1',
+                        [interaction.guild.id]
+                    );
+                    
+                    if (result.rows.length === 0 || !result.rows[0].enabled) {
+                        await interaction.reply({
+                            embeds: [{
+                                color: 0xed4245,
+                                title: '❌ Anti-Nuke Protection: Disabled',
+                                description: 'Use `/antinuke enable` to protect your server.',
+                                timestamp: new Date()
+                            }],
+                            flags: 64
+                        });
+                    } else {
+                        const config = result.rows[0];
+                        const whitelist = config.whitelist || [];
+                        
+                        const embed = {
+                            color: 0x3ba55d,
+                            title: '✅ Anti-Nuke Protection: Active',
+                            fields: [
+                                { name: 'Status', value: '🟢 Enabled', inline: true },
+                                { name: 'Whitelisted Users', value: whitelist.length > 0 ? whitelist.map(id => `<@${id}>`).join(', ') : 'None', inline: false }
+                            ],
+                            footer: { text: 'Your server is protected' },
+                            timestamp: new Date()
+                        };
+                        
+                        await interaction.reply({ embeds: [embed], flags: 64 });
+                    }
+                }
+            } catch (err) {
+                console.error('Anti-nuke error:', err);
+                await interaction.reply({ content: 'Error configuring anti-nuke: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'joingate') {
+            const subcommand = interaction.options.getSubcommand();
+            
+            try {
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS joingate_config (
+                        guild_id VARCHAR(32) PRIMARY KEY,
+                        enabled BOOLEAN DEFAULT true,
+                        channel_id VARCHAR(32),
+                        role_id VARCHAR(32)
+                    )
+                `);
+                
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS joingate_pending (
+                        guild_id VARCHAR(32),
+                        user_id VARCHAR(32),
+                        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (guild_id, user_id)
+                    )
+                `);
+                
+                if (subcommand === 'enable') {
+                    const channel = interaction.options.getChannel('channel');
+                    const role = interaction.options.getRole('role');
+                    
+                    await db.query(
+                        `INSERT INTO joingate_config (guild_id, enabled, channel_id, role_id) 
+                         VALUES ($1, true, $2, $3)
+                         ON CONFLICT (guild_id) DO UPDATE SET enabled = true, channel_id = $2, role_id = $3`,
+                        [interaction.guild.id, channel.id, role.id]
+                    );
+                    
+                    const embed = {
+                        color: 0x3ba55d,
+                        title: '🔐 Join Verification Enabled',
+                        description: 'New members must verify before accessing the server.',
+                        fields: [
+                            { name: 'Verification Channel', value: `${channel}`, inline: true },
+                            { name: 'Verified Role', value: `${role}`, inline: true },
+                            { name: 'How It Works', value: 'New members will see a verification message with a button. They must click it to gain access.', inline: false }
+                        ],
+                        footer: { text: 'Protects against bot raids' },
+                        timestamp: new Date()
+                    };
+                    
+                    await interaction.reply({ embeds: [embed] });
+                    
+                } else if (subcommand === 'disable') {
+                    await db.query(
+                        `UPDATE joingate_config SET enabled = false WHERE guild_id = $1`,
+                        [interaction.guild.id]
+                    );
+                    
+                    await interaction.reply({
+                        embeds: [{
+                            color: 0xfaa61a,
+                            title: '⚠️ Join Verification Disabled',
+                            description: 'New members will no longer need to verify.',
+                            timestamp: new Date()
+                        }]
+                    });
+                    
+                } else if (subcommand === 'status') {
+                    const result = await db.query(
+                        'SELECT * FROM joingate_config WHERE guild_id = $1',
+                        [interaction.guild.id]
+                    );
+                    
+                    if (result.rows.length === 0 || !result.rows[0].enabled) {
+                        await interaction.reply({
+                            embeds: [{
+                                color: 0xed4245,
+                                title: '❌ Join Verification: Disabled',
+                                description: 'Use `/joingate enable` to protect against bot raids.',
+                                timestamp: new Date()
+                            }],
+                            flags: 64
+                        });
+                    } else {
+                        const config = result.rows[0];
+                        const pending = await db.query(
+                            'SELECT COUNT(*) FROM joingate_pending WHERE guild_id = $1',
+                            [interaction.guild.id]
+                        );
+                        
+                        const embed = {
+                            color: 0x3ba55d,
+                            title: '✅ Join Verification: Active',
+                            fields: [
+                                { name: 'Status', value: '🟢 Enabled', inline: true },
+                                { name: 'Pending Verifications', value: pending.rows[0].count, inline: true },
+                                { name: 'Verification Channel', value: `<#${config.channel_id}>`, inline: true },
+                                { name: 'Verified Role', value: `<@&${config.role_id}>`, inline: true }
+                            ],
+                            footer: { text: 'Your server is protected from bot raids' },
+                            timestamp: new Date()
+                        };
+                        
+                        await interaction.reply({ embeds: [embed], flags: 64 });
+                    }
+                }
+            } catch (err) {
+                console.error('Joingate error:', err);
+                await interaction.reply({ content: 'Error configuring join verification: ' + err.message, flags: 64 });
             }
             return;
         }
@@ -3834,6 +4180,58 @@ app.listen(PORT, () => {
     // Welcome new members
     client.on('guildMemberAdd', async (member) => {
         try {
+            // === JOIN GATE VERIFICATION ===
+            const joingateResult = await db.query(
+                'SELECT * FROM joingate_config WHERE guild_id = $1 AND enabled = true',
+                [member.guild.id]
+            );
+            
+            if (joingateResult.rows.length > 0) {
+                const config = joingateResult.rows[0];
+                const verifyChannel = member.guild.channels.cache.get(config.channel_id);
+                
+                if (verifyChannel && verifyChannel.isTextBased()) {
+                    // Add to pending
+                    await db.query(
+                        'INSERT INTO joingate_pending (guild_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                        [member.guild.id, member.id]
+                    );
+                    
+                    // Send verification message
+                    const { ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+                    
+                    const verifyButton = new ButtonBuilder()
+                        .setCustomId(`verify_${member.id}`)
+                        .setLabel('Verify')
+                        .setStyle(ButtonStyle.Success)
+                        .setEmoji('✅');
+                    
+                    const row = new ActionRowBuilder().addComponents(verifyButton);
+                    
+                    await verifyChannel.send({
+                        content: `Welcome ${member}! Please click the button below to verify and gain access to the server.`,
+                        components: [row]
+                    });
+                    
+                    // DM the user
+                    try {
+                        await member.send({
+                            embeds: [{
+                                color: 0x5865F2,
+                                title: `Welcome to ${member.guild.name}!`,
+                                description: `Please verify yourself in ${verifyChannel} to gain access to the server.`,
+                                timestamp: new Date()
+                            }]
+                        });
+                    } catch (err) {
+                        // User has DMs disabled
+                    }
+                    
+                    return; // Don't show welcome message yet
+                }
+            }
+            
+            // === NORMAL WELCOME MESSAGE ===
             // Fetch welcome channel from DB
             await db.query(`CREATE TABLE IF NOT EXISTS welcome_channels (guild_id VARCHAR(32) PRIMARY KEY, channel_id VARCHAR(32))`);
             const res = await db.query('SELECT channel_id FROM welcome_channels WHERE guild_id = $1', [member.guild.id]);
@@ -4406,5 +4804,203 @@ app.listen(PORT, () => {
             console.error('Error checking giveaways:', err);
         }
     }, 10000); // Check every 10 seconds
+
+    // =====================================
+    // ANTI-NUKE EVENT HANDLERS
+    // =====================================
+
+    // Track actions in memory for rate limiting
+    const antiNukeActions = new Map(); // Map<guildId, Map<userId, Array<{action, timestamp}>>>
+
+    function trackAction(guildId, userId, action) {
+        if (!antiNukeActions.has(guildId)) {
+            antiNukeActions.set(guildId, new Map());
+        }
+        
+        const guildActions = antiNukeActions.get(guildId);
+        if (!guildActions.has(userId)) {
+            guildActions.set(userId, []);
+        }
+        
+        const userActions = guildActions.get(userId);
+        const now = Date.now();
+        
+        // Remove actions older than 60 seconds
+        const recentActions = userActions.filter(a => now - a.timestamp < 60000);
+        recentActions.push({ action, timestamp: now });
+        guildActions.set(userId, recentActions);
+        
+        return recentActions;
+    }
+
+    async function checkAntiNuke(guild, userId, action) {
+        try {
+            // Check if anti-nuke is enabled
+            const config = await db.query(
+                'SELECT enabled, whitelist FROM antinuke_config WHERE guild_id = $1',
+                [guild.id]
+            );
+            
+            if (!config.rows.length || !config.rows[0].enabled) return false;
+            
+            // Check if user is whitelisted
+            const whitelist = config.rows[0].whitelist || [];
+            if (whitelist.includes(userId)) return false;
+            
+            // Track the action
+            const actions = trackAction(guild.id, userId, action);
+            
+            // Count recent actions of this type
+            const recentCount = actions.filter(a => a.action === action).length;
+            
+            // Thresholds
+            const thresholds = {
+                channelDelete: 3,
+                roleDelete: 3,
+                memberBan: 5,
+                memberKick: 5,
+                roleUpdate: 2
+            };
+            
+            if (recentCount >= (thresholds[action] || 3)) {
+                // Nuke attempt detected! Ban the user
+                try {
+                    await guild.members.ban(userId, { reason: `Anti-Nuke: Mass ${action} detected` });
+                    
+                    // Log to audit channel if configured
+                    const logChannel = guild.channels.cache.find(c => c.name === 'audit-logs' || c.name === 'mod-logs');
+                    if (logChannel) {
+                        const embed = new EmbedBuilder()
+                            .setTitle('🛡️ Anti-Nuke Action Taken')
+                            .setColor('#FF0000')
+                            .setDescription(`**User:** <@${userId}>\n**Action:** Banned for mass ${action}\n**Count:** ${recentCount} actions in 60 seconds`)
+                            .setTimestamp();
+                        
+                        await logChannel.send({ embeds: [embed] });
+                    }
+                    
+                    return true;
+                } catch (err) {
+                    console.error('Error banning user in anti-nuke:', err);
+                }
+            }
+            
+            return false;
+        } catch (err) {
+            console.error('Error in checkAntiNuke:', err);
+            return false;
+        }
+    }
+
+    // Channel Delete Event
+    client.on('channelDelete', async (channel) => {
+        try {
+            if (!channel.guild) return;
+            
+            // Fetch audit log to find who deleted the channel
+            const auditLogs = await channel.guild.fetchAuditLogs({
+                limit: 1,
+                type: AuditLogEvent.ChannelDelete
+            });
+            
+            const deleteLog = auditLogs.entries.first();
+            if (!deleteLog) return;
+            
+            await checkAntiNuke(channel.guild, deleteLog.executor.id, 'channelDelete');
+        } catch (err) {
+            console.error('Error in channelDelete event:', err);
+        }
+    });
+
+    // Role Delete Event
+    client.on('roleDelete', async (role) => {
+        try {
+            // Fetch audit log to find who deleted the role
+            const auditLogs = await role.guild.fetchAuditLogs({
+                limit: 1,
+                type: AuditLogEvent.RoleDelete
+            });
+            
+            const deleteLog = auditLogs.entries.first();
+            if (!deleteLog) return;
+            
+            await checkAntiNuke(role.guild, deleteLog.executor.id, 'roleDelete');
+        } catch (err) {
+            console.error('Error in roleDelete event:', err);
+        }
+    });
+
+    // Ban Event
+    client.on('guildBanAdd', async (ban) => {
+        try {
+            // Fetch audit log to find who banned
+            const auditLogs = await ban.guild.fetchAuditLogs({
+                limit: 1,
+                type: AuditLogEvent.MemberBanAdd
+            });
+            
+            const banLog = auditLogs.entries.first();
+            if (!banLog) return;
+            
+            await checkAntiNuke(ban.guild, banLog.executor.id, 'memberBan');
+        } catch (err) {
+            console.error('Error in guildBanAdd event:', err);
+        }
+    });
+
+    // Member Remove (Kick) Event
+    client.on('guildMemberRemove', async (member) => {
+        try {
+            // Fetch audit log to find if it was a kick
+            const auditLogs = await member.guild.fetchAuditLogs({
+                limit: 1,
+                type: AuditLogEvent.MemberKick
+            });
+            
+            const kickLog = auditLogs.entries.first();
+            if (!kickLog) return;
+            
+            // Check if the audit log entry is recent (within last 3 seconds)
+            if (Date.now() - kickLog.createdTimestamp > 3000) return;
+            
+            await checkAntiNuke(member.guild, kickLog.executor.id, 'memberKick');
+        } catch (err) {
+            console.error('Error in guildMemberRemove event:', err);
+        }
+    });
+
+    // Role Update Event (detect dangerous permission changes)
+    client.on('roleUpdate', async (oldRole, newRole) => {
+        try {
+            // Check if dangerous permissions were added
+            const dangerousPerms = [
+                PermissionFlagsBits.Administrator,
+                PermissionFlagsBits.ManageGuild,
+                PermissionFlagsBits.ManageRoles,
+                PermissionFlagsBits.ManageChannels,
+                PermissionFlagsBits.BanMembers,
+                PermissionFlagsBits.KickMembers
+            ];
+            
+            const oldHasDangerous = dangerousPerms.some(perm => oldRole.permissions.has(perm));
+            const newHasDangerous = dangerousPerms.some(perm => newRole.permissions.has(perm));
+            
+            // If dangerous perms were added
+            if (!oldHasDangerous && newHasDangerous) {
+                // Fetch audit log to find who updated the role
+                const auditLogs = await newRole.guild.fetchAuditLogs({
+                    limit: 1,
+                    type: AuditLogEvent.RoleUpdate
+                });
+                
+                const updateLog = auditLogs.entries.first();
+                if (!updateLog) return;
+                
+                await checkAntiNuke(newRole.guild, updateLog.executor.id, 'roleUpdate');
+            }
+        } catch (err) {
+            console.error('Error in roleUpdate event:', err);
+        }
+    });
 
     client.login(process.env.BOT_TOKEN);
