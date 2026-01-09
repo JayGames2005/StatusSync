@@ -418,6 +418,60 @@
                     </div>
                 </div>
                 
+                <!-- Anti-Nuke Protection -->
+                <div class="card" style="margin-top: 1rem;">
+                    <h3>🛡️ Anti-Nuke Protection</h3>
+                    <p style="color: #99aab5; margin-bottom: 1rem;">Protect your server from malicious mass actions (FREE feature)</p>
+                    
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="antinuke-enabled">
+                            <strong>Enable Anti-Nuke Protection</strong>
+                        </label>
+                        <p style="color: #99aab5; font-size: 0.9rem; margin-top: 0.5rem; margin-left: 1.5rem;">
+                            Automatically bans users who perform mass actions like deleting channels, roles, or banning members
+                        </p>
+                    </div>
+                    
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Whitelisted Users</label>
+                        <p style="color: #99aab5; font-size: 0.9rem; margin-bottom: 0.5rem;">Add user IDs to whitelist (one per line)</p>
+                        <textarea id="antinuke-whitelist" rows="5" placeholder="123456789012345678&#10;987654321098765432" 
+                            style="width: 100%; padding: 0.5rem; background: #2c2f33; border: 1px solid #40444b; color: white; border-radius: 4px; font-family: monospace;"></textarea>
+                    </div>
+                    
+                    <button onclick="saveAntiNuke()" class="btn" style="background: #f04747;">
+                        💾 Save Anti-Nuke Settings
+                    </button>
+                </div>
+                
+                <!-- Join Gate Verification -->
+                <div class="card" style="margin-top: 1rem;">
+                    <h3>🚪 Join Gate Verification</h3>
+                    <p style="color: #99aab5; margin-bottom: 1rem;">Require new members to verify before accessing your server (FREE feature)</p>
+                    
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="joingate-enabled">
+                            <strong>Enable Join Gate</strong>
+                        </label>
+                        <p style="color: #99aab5; font-size: 0.9rem; margin-top: 0.5rem; margin-left: 1.5rem;">
+                            New members must click a verification button in their DMs before getting access
+                        </p>
+                    </div>
+                    
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Verified Role ID</label>
+                        <p style="color: #99aab5; font-size: 0.9rem; margin-bottom: 0.5rem;">Role ID to assign after verification</p>
+                        <input type="text" id="joingate-role" placeholder="123456789012345678" 
+                            style="width: 100%; padding: 0.5rem; background: #2c2f33; border: 1px solid #40444b; color: white; border-radius: 4px; font-family: monospace;">
+                    </div>
+                    
+                    <button onclick="saveJoinGate()" class="btn" style="background: #3ba55d;">
+                        💾 Save Join Gate Settings
+                    </button>
+                </div>
+                
                 <!-- Backup & Restore -->
                 <div class="card" style="margin-top: 1rem;">
                     <h3>💾 Backup & Restore</h3>

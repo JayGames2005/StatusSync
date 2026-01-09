@@ -583,4 +583,80 @@ router.delete('/backup/:id', authMiddleware, requireGuildId, async (req, res) =>
     }
 });
 
+// === ANTI-NUKE ENDPOINTS ===
+router.get('/antinuke', authMiddleware, requireGuildId, async (req, res) => {
+    try {
+        const { guild_id } = req.query;
+        const result = await db.query(
+            'SELECT enabled, whitelist FROM antinuke_config WHERE guild_id = $1',
+            [guild_id]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.json({ enabled: false, whitelist: [] });
+        }
+        
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/antinuke', authMiddleware, requireGuildId, async (req, res) => {
+    try {
+        const { guild_id } = req.query;
+        const { enabled, whitelist } = req.body;
+        
+        await db.query(
+            `INSERT INTO antinuke_config (guild_id, enabled, whitelist) 
+             VALUES ($1, $2, $3) 
+             ON CONFLICT (guild_id) 
+             DO UPDATE SET enabled = $2, whitelist = $3`,
+            [guild_id, enabled, whitelist || []]
+        );
+        
+        res.json({ success: true, message: 'Anti-nuke settings updated' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// === JOIN GATE ENDPOINTS ===
+router.get('/joingate', authMiddleware, requireGuildId, async (req, res) => {
+    try {
+        const { guild_id } = req.query;
+        const result = await db.query(
+            'SELECT enabled, verified_role_id FROM joingate_config WHERE guild_id = $1',
+            [guild_id]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.json({ enabled: false, verified_role_id: null });
+        }
+        
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/joingate', authMiddleware, requireGuildId, async (req, res) => {
+    try {
+        const { guild_id } = req.query;
+        const { enabled, verified_role_id } = req.body;
+        
+        await db.query(
+            `INSERT INTO joingate_config (guild_id, enabled, verified_role_id) 
+             VALUES ($1, $2, $3) 
+             ON CONFLICT (guild_id) 
+             DO UPDATE SET enabled = $2, verified_role_id = $3`,
+            [guild_id, enabled, verified_role_id]
+        );
+        
+        res.json({ success: true, message: 'Join gate settings updated' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

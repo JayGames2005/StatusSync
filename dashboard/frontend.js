@@ -550,6 +550,10 @@ async function loadPremium() {
             // Load auto-mod rules
             loadAutoModRules();
             
+            // Load anti-nuke and joingate settings
+            loadAntiNuke();
+            loadJoinGate();
+            
             // Load backups
             loadBackups();
         } else {
@@ -918,6 +922,84 @@ function showError(message) {
 
 function hideError() {
     document.getElementById('error').style.display = 'none';
+}
+
+// === ANTI-NUKE FUNCTIONS ===
+async function loadAntiNuke() {
+    try {
+        const guildId = document.getElementById('guild-select').value;
+        const data = await fetch(`/dashboard/api/antinuke?guild_id=${guildId}`, { credentials: 'include' })
+            .then(r => r.json());
+        
+        document.getElementById('antinuke-enabled').checked = data.enabled || false;
+        document.getElementById('antinuke-whitelist').value = (data.whitelist || []).join('\n');
+    } catch (err) {
+        console.error('Error loading anti-nuke settings:', err);
+    }
+}
+
+async function saveAntiNuke() {
+    try {
+        const guildId = document.getElementById('guild-select').value;
+        const enabled = document.getElementById('antinuke-enabled').checked;
+        const whitelistText = document.getElementById('antinuke-whitelist').value;
+        const whitelist = whitelistText.split('\n').map(id => id.trim()).filter(id => id.length > 0);
+        
+        const response = await fetch('/dashboard/api/antinuke', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ guild_id: guildId, enabled, whitelist })
+        });
+        
+        if (!response.ok) throw new Error('Failed to save anti-nuke settings');
+        
+        alert('✅ Anti-nuke settings saved successfully!');
+    } catch (err) {
+        console.error('Error saving anti-nuke settings:', err);
+        alert('❌ Failed to save settings: ' + err.message);
+    }
+}
+
+// === JOIN GATE FUNCTIONS ===
+async function loadJoinGate() {
+    try {
+        const guildId = document.getElementById('guild-select').value;
+        const data = await fetch(`/dashboard/api/joingate?guild_id=${guildId}`, { credentials: 'include' })
+            .then(r => r.json());
+        
+        document.getElementById('joingate-enabled').checked = data.enabled || false;
+        document.getElementById('joingate-role').value = data.verified_role_id || '';
+    } catch (err) {
+        console.error('Error loading join gate settings:', err);
+    }
+}
+
+async function saveJoinGate() {
+    try {
+        const guildId = document.getElementById('guild-select').value;
+        const enabled = document.getElementById('joingate-enabled').checked;
+        const verified_role_id = document.getElementById('joingate-role').value.trim();
+        
+        if (enabled && !verified_role_id) {
+            alert('⚠️ Please specify a verified role ID');
+            return;
+        }
+        
+        const response = await fetch('/dashboard/api/joingate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ guild_id: guildId, enabled, verified_role_id })
+        });
+        
+        if (!response.ok) throw new Error('Failed to save join gate settings');
+        
+        alert('✅ Join gate settings saved successfully!');
+    } catch (err) {
+        console.error('Error saving join gate settings:', err);
+        alert('❌ Failed to save settings: ' + err.message);
+    }
 }
 
 // Initialize
