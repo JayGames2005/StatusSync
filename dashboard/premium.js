@@ -342,14 +342,43 @@ router.post('/features', requireAuth || ((req, res, next) => next()), async (req
             return res.status(400).json({ error: 'No features to update' });
         }
         
-        await db.query(`
-            INSERT INTO premium_features (guild_id, ${fields.map((_, i) => Object.keys(features)[i]).join(', ')})
-            VALUES ($1, ${features.custom_status ? '$2' : ''}${features.xp_multiplier ? ', $3' : ''})
-            ON CONFLICT (guild_id) DO UPDATE SET ${fields.join(', ')}
-        `, values);
+        // Build proper query
+        const fieldNames = [];
+        const fieldPlaceholders = [];
+        let idx = 2;
+        
+        if (features.custom_status !== undefined) {
+            fieldNames.push('custom_status');
+            fieldPlaceholders.push(`$${idx++}`);
+        }
+        if (features.xp_multiplier !== undefined) {
+            fieldNames.push('xp_multiplier');
+            fieldPlaceholders.push(`$${idx++}`);
+        }
+        if (features.embed_color !== undefined) {
+            fieldNames.push('embed_color');
+            fieldPlaceholders.push(`$${idx++}`);
+        }
+        if (features.auto_mod_enabled !== undefined) {
+            fieldNames.push('auto_mod_enabled');
+            fieldPlaceholders.push(`$${idx++}`);
+        }
+        if (features.custom_welcome_enabled !== undefined) {
+            fieldNames.push('custom_welcome_enabled');
+            fieldPlaceholders.push(`$${idx++}`);
+        }
+        
+        if (fieldNames.length > 0) {
+            await db.query(`
+                INSERT INTO premium_features (guild_id, ${fieldNames.join(', ')})
+                VALUES ($1, ${fieldPlaceholders.join(', ')})
+                ON CONFLICT (guild_id) DO UPDATE SET ${fields.join(', ')}
+            `, values);
+        }
         
         res.json({ success: true });
     } catch (err) {
+        console.error('Error updating premium features:', err);
         res.status(500).json({ error: err.message });
     }
 });

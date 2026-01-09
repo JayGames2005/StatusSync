@@ -5,6 +5,7 @@
   "scripts": {
     "start": "node index.js",
     "dashboard": "node dashboard/server.js",
+    "validate": "node validate-dashboard.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "engines": {
