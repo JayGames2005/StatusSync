@@ -1,4 +1,60 @@
 // Removed invalid top-level imgsay handler. See below for correct placement.
+
+// --- LEVEL REWARDS TABLE ---
+async function ensureLevelRewardsTable() {
+    await db.query(`CREATE TABLE IF NOT EXISTS level_rewards (
+        id SERIAL PRIMARY KEY,
+        guild_id VARCHAR(32),
+        level INTEGER,
+        role_id VARCHAR(32),
+        UNIQUE(guild_id, level)
+    )`);
+    await db.query(`CREATE TABLE IF NOT EXISTS levelup_config (
+        guild_id VARCHAR(32) PRIMARY KEY,
+        enabled BOOLEAN DEFAULT TRUE,
+        channel_id VARCHAR(32),
+        message TEXT DEFAULT 'GG {user}, you leveled up to **Level {level}**! 🎉'
+    )`);
+}
+
+// --- ECONOMY SYSTEM TABLES ---
+async function ensureEconomyTables() {
+    await db.query(`CREATE TABLE IF NOT EXISTS economy_balance (
+        guild_id VARCHAR(32),
+        user_id VARCHAR(32),
+        balance BIGINT DEFAULT 0,
+        bank BIGINT DEFAULT 0,
+        last_daily BIGINT,
+        last_weekly BIGINT,
+        PRIMARY KEY(guild_id, user_id)
+    )`);
+    await db.query(`CREATE TABLE IF NOT EXISTS economy_config (
+        guild_id VARCHAR(32) PRIMARY KEY,
+        currency_name VARCHAR(50) DEFAULT 'coins',
+        currency_symbol VARCHAR(10) DEFAULT '🪙',
+        daily_amount INTEGER DEFAULT 100,
+        weekly_amount INTEGER DEFAULT 1000,
+        starting_balance INTEGER DEFAULT 0
+    )`);
+    await db.query(`CREATE TABLE IF NOT EXISTS economy_shop (
+        id SERIAL PRIMARY KEY,
+        guild_id VARCHAR(32),
+        item_name VARCHAR(100),
+        item_price BIGINT,
+        item_type VARCHAR(20),
+        item_data VARCHAR(255),
+        description TEXT
+    )`);
+    await db.query(`CREATE TABLE IF NOT EXISTS economy_inventory (
+        id SERIAL PRIMARY KEY,
+        guild_id VARCHAR(32),
+        user_id VARCHAR(32),
+        item_name VARCHAR(100),
+        quantity INTEGER DEFAULT 1,
+        purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`);
+}
+
 // --- TICKETS TABLE ---
 async function ensureTicketsTable() {
     await db.query(`CREATE TABLE IF NOT EXISTS ticket_config (
@@ -558,6 +614,161 @@ const commands = [
                 ))
         .addIntegerOption(option => option.setName('appeal_id').setDescription('Appeal ID (for approve/deny)').setRequired(false))
         .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
+    new SlashCommandBuilder()
+        .setName('levelreward')
+        .setDescription('Manage level-up role rewards')
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('add')
+                .setDescription('Add a role reward for reaching a level')
+                .addIntegerOption(option => option.setName('level').setDescription('Level required').setRequired(true).setMinValue(1))
+                .addRoleOption(option => option.setName('role').setDescription('Role to give').setRequired(true))
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('remove')
+                .setDescription('Remove a level reward')
+                .addIntegerOption(option => option.setName('level').setDescription('Level to remove reward from').setRequired(true))
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('list')
+                .setDescription('List all level rewards')
+        )
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
+    new SlashCommandBuilder()
+        .setName('levelup')
+        .setDescription('Configure level-up messages')
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('toggle')
+                .setDescription('Enable/disable level-up announcements')
+                .addBooleanOption(option => option.setName('enabled').setDescription('Enable or disable').setRequired(true))
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('channel')
+                .setDescription('Set level-up announcement channel')
+                .addChannelOption(option => option.setName('channel').setDescription('Channel for announcements (leave empty for same channel)').setRequired(false))
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('message')
+                .setDescription('Set custom level-up message')
+                .addStringOption(option => option.setName('message').setDescription('Use {user}, {level}, {xp}').setRequired(true))
+        )
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    new SlashCommandBuilder()
+        .setName('balance')
+        .setDescription('Check your or someone\'s balance')
+        .addUserOption(option => option.setName('user').setDescription('User to check (optional)').setRequired(false)),
+    new SlashCommandBuilder()
+        .setName('daily')
+        .setDescription('Claim your daily reward'),
+    new SlashCommandBuilder()
+        .setName('weekly')
+        .setDescription('Claim your weekly reward'),
+    new SlashCommandBuilder()
+        .setName('pay')
+        .setDescription('Pay someone from your balance')
+        .addUserOption(option => option.setName('user').setDescription('User to pay').setRequired(true))
+        .addIntegerOption(option => option.setName('amount').setDescription('Amount to pay').setRequired(true).setMinValue(1)),
+    new SlashCommandBuilder()
+        .setName('shop')
+        .setDescription('Manage the server shop')
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('view')
+                .setDescription('View all items in the shop')
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('buy')
+                .setDescription('Buy an item from the shop')
+                .addIntegerOption(option => option.setName('item_id').setDescription('Item ID to buy').setRequired(true))
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('add')
+                .setDescription('Add an item to the shop')
+                .addStringOption(option => option.setName('name').setDescription('Item name').setRequired(true))
+                .addIntegerOption(option => option.setName('price').setDescription('Item price').setRequired(true).setMinValue(1))
+                .addStringOption(option =>
+                    option.setName('type')
+                        .setDescription('Item type')
+                        .setRequired(true)
+                        .addChoices(
+                            { name: 'Role', value: 'role' },
+                            { name: 'Item', value: 'item' }
+                        ))
+                .addStringOption(option => option.setName('data').setDescription('Role ID or item description').setRequired(true))
+                .addStringOption(option => option.setName('description').setDescription('Item description').setRequired(false))
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('remove')
+                .setDescription('Remove an item from the shop')
+                .addIntegerOption(option => option.setName('item_id').setDescription('Item ID to remove').setRequired(true))
+        ),
+    new SlashCommandBuilder()
+        .setName('inventory')
+        .setDescription('View your purchased items')
+        .addUserOption(option => option.setName('user').setDescription('User to check (optional)').setRequired(false)),
+    new SlashCommandBuilder()
+        .setName('coinflip')
+        .setDescription('Flip a coin and bet on the outcome')
+        .addStringOption(option =>
+            option.setName('choice')
+                .setDescription('Heads or Tails')
+                .setRequired(true)
+                .addChoices(
+                    { name: 'Heads', value: 'heads' },
+                    { name: 'Tails', value: 'tails' }
+                ))
+        .addIntegerOption(option => option.setName('bet').setDescription('Amount to bet').setRequired(true).setMinValue(1)),
+    new SlashCommandBuilder()
+        .setName('slots')
+        .setDescription('Play the slot machine')
+        .addIntegerOption(option => option.setName('bet').setDescription('Amount to bet').setRequired(true).setMinValue(1)),
+    new SlashCommandBuilder()
+        .setName('economysetup')
+        .setDescription('Configure economy system')
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('currency')
+                .setDescription('Set currency name and symbol')
+                .addStringOption(option => option.setName('name').setDescription('Currency name (e.g., coins)').setRequired(true))
+                .addStringOption(option => option.setName('symbol').setDescription('Currency symbol (e.g., 🪙)').setRequired(true))
+        )
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('rewards')
+                .setDescription('Set daily/weekly reward amounts')
+                .addIntegerOption(option => option.setName('daily').setDescription('Daily reward amount').setRequired(true).setMinValue(1))
+                .addIntegerOption(option => option.setName('weekly').setDescription('Weekly reward amount').setRequired(true).setMinValue(1))
+        )
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
+        .setName('addmoney')
+        .setDescription('Add money to a user (admin only)')
+        .addUserOption(option => option.setName('user').setDescription('User to give money').setRequired(true))
+        .addIntegerOption(option => option.setName('amount').setDescription('Amount to add').setRequired(true))
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
+        .setName('ticketpanel')
+        .setDescription('Create a ticket panel with button')
+        .addChannelOption(option => option.setName('channel').setDescription('Channel to send panel').setRequired(true))
+        .addStringOption(option => option.setName('title').setDescription('Panel title').setRequired(false))
+        .addStringOption(option => option.setName('description').setDescription('Panel description').setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
+        .setName('claim')
+        .setDescription('Claim a ticket to work on it')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+    new SlashCommandBuilder()
+        .setName('transcript')
+        .setDescription('Generate a transcript of the current ticket')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
 ];
 
 async function registerSlashCommands() {
@@ -860,6 +1071,116 @@ app.listen(PORT, () => {
                 } catch (err) {
                     console.error('Verification error:', err);
                     await interaction.reply({ content: '❌ Error verifying: ' + err.message, flags: 64 });
+                }
+                return;
+            }
+            
+            // Ticket Creation Button
+            if (interaction.customId === 'create_ticket') {
+                try {
+                    await ensureTicketsTable();
+                    
+                    // Check if ticket already exists for user
+                    const existing = await db.query(
+                        'SELECT * FROM tickets WHERE guild_id = $1 AND user_id = $2 AND closed = FALSE',
+                        [interaction.guild.id, interaction.user.id]
+                    );
+                    
+                    if (existing.rows.length > 0) {
+                        const channelId = existing.rows[0].channel_id;
+                        await interaction.reply({ 
+                            content: `❌ You already have an open ticket: <#${channelId}>`, 
+                            flags: 64 
+                        });
+                        return;
+                    }
+                    
+                    // Get ticket config
+                    const config = await db.query(
+                        'SELECT * FROM ticket_config WHERE guild_id = $1',
+                        [interaction.guild.id]
+                    );
+                    
+                    if (config.rows.length === 0) {
+                        await interaction.reply({ 
+                            content: '❌ Ticket system is not configured! Ask an admin to run `/ticketsetup`.', 
+                            flags: 64 
+                        });
+                        return;
+                    }
+                    
+                    const ticketConfig = config.rows[0];
+                    const category = interaction.guild.channels.cache.get(ticketConfig.category_id);
+                    
+                    if (!category) {
+                        await interaction.reply({ content: '❌ Ticket category not found!', flags: 64 });
+                        return;
+                    }
+                    
+                    await interaction.deferReply({ flags: 64 });
+                    
+                    // Increment ticket counter
+                    await db.query(
+                        'UPDATE ticket_config SET ticket_counter = ticket_counter + 1 WHERE guild_id = $1',
+                        [interaction.guild.id]
+                    );
+                    
+                    const updated = await db.query(
+                        'SELECT ticket_counter FROM ticket_config WHERE guild_id = $1',
+                        [interaction.guild.id]
+                    );
+                    
+                    const ticketNumber = updated.rows[0].ticket_counter;
+                    
+                    // Create ticket channel
+                    const { ChannelType, PermissionFlagsBits: Perms, EmbedBuilder } = require('discord.js');
+                    
+                    const ticketChannel = await interaction.guild.channels.create({
+                        name: `ticket-${ticketNumber}`,
+                        type: ChannelType.GuildText,
+                        parent: category.id,
+                        permissionOverwrites: [
+                            {
+                                id: interaction.guild.id,
+                                deny: [Perms.ViewChannel]
+                            },
+                            {
+                                id: interaction.user.id,
+                                allow: [Perms.ViewChannel, Perms.SendMessages, Perms.ReadMessageHistory]
+                            }
+                        ]
+                    });
+                    
+                    // Add support role if configured
+                    if (ticketConfig.support_role_id) {
+                        await ticketChannel.permissionOverwrites.create(ticketConfig.support_role_id, {
+                            ViewChannel: true,
+                            SendMessages: true,
+                            ReadMessageHistory: true
+                        });
+                    }
+                    
+                    // Save to database
+                    await db.query(
+                        'INSERT INTO tickets (channel_id, guild_id, user_id, ticket_number) VALUES ($1, $2, $3, $4)',
+                        [ticketChannel.id, interaction.guild.id, interaction.user.id, ticketNumber]
+                    );
+                    
+                    // Send welcome message in ticket
+                    const welcomeEmbed = new EmbedBuilder()
+                        .setColor(0x3ba55d)
+                        .setTitle(`🎫 Ticket #${ticketNumber}`)
+                        .setDescription(`Welcome ${interaction.user}!\n\nPlease describe your issue and our support team will assist you shortly.\n\nTo close this ticket, use \`/closeticket\`.`)
+                        .setTimestamp();
+                    
+                    await ticketChannel.send({ content: `${interaction.user}`, embeds: [welcomeEmbed] });
+                    
+                    await interaction.editReply({ 
+                        content: `✅ Ticket created! ${ticketChannel}` 
+                    });
+                } catch (err) {
+                    console.error(err);
+                    await interaction.editReply({ content: `❌ Error: ${err.message}` });
                 }
                 return;
             }
@@ -3058,6 +3379,793 @@ app.listen(PORT, () => {
             return;
         }
 
+        // ====== LEVEL REWARDS ======
+        if (commandName === 'levelreward') {
+            const subcommand = interaction.options.getSubcommand();
+            
+            try {
+                await ensureLevelRewardsTable();
+                
+                if (subcommand === 'add') {
+                    const level = interaction.options.getInteger('level');
+                    const role = interaction.options.getRole('role');
+                    
+                    await db.query(`
+                        INSERT INTO level_rewards (guild_id, level, role_id)
+                        VALUES ($1, $2, $3)
+                        ON CONFLICT (guild_id, level)
+                        DO UPDATE SET role_id = $3
+                    `, [interaction.guild.id, level, role.id]);
+                    
+                    await interaction.reply({ content: `✅ Level ${level} will now reward ${role}!`, flags: 64 });
+                    
+                } else if (subcommand === 'remove') {
+                    const level = interaction.options.getInteger('level');
+                    
+                    await db.query('DELETE FROM level_rewards WHERE guild_id = $1 AND level = $2', [interaction.guild.id, level]);
+                    await interaction.reply({ content: `✅ Removed level ${level} reward.`, flags: 64 });
+                    
+                } else if (subcommand === 'list') {
+                    const rewards = await db.query(
+                        'SELECT level, role_id FROM level_rewards WHERE guild_id = $1 ORDER BY level ASC',
+                        [interaction.guild.id]
+                    );
+                    
+                    if (rewards.rows.length === 0) {
+                        await interaction.reply({ content: '📋 No level rewards configured yet.', flags: 64 });
+                        return;
+                    }
+                    
+                    const list = rewards.rows.map(r => `Level **${r.level}**: <@&${r.role_id}>`).join('\n');
+                    const embed = {
+                        color: 0x5865F2,
+                        title: '🎁 Level Rewards',
+                        description: list,
+                        footer: { text: `${rewards.rows.length} reward(s) configured` }
+                    };
+                    
+                    await interaction.reply({ embeds: [embed], flags: 64 });
+                }
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'levelup') {
+            const subcommand = interaction.options.getSubcommand();
+            
+            try {
+                await ensureLevelRewardsTable();
+                
+                if (subcommand === 'toggle') {
+                    const enabled = interaction.options.getBoolean('enabled');
+                    
+                    await db.query(`
+                        INSERT INTO levelup_config (guild_id, enabled)
+                        VALUES ($1, $2)
+                        ON CONFLICT (guild_id)
+                        DO UPDATE SET enabled = $2
+                    `, [interaction.guild.id, enabled]);
+                    
+                    await interaction.reply({ 
+                        content: `✅ Level-up messages ${enabled ? 'enabled' : 'disabled'}.`, 
+                        flags: 64 
+                    });
+                    
+                } else if (subcommand === 'channel') {
+                    const channel = interaction.options.getChannel('channel');
+                    
+                    await db.query(`
+                        INSERT INTO levelup_config (guild_id, channel_id)
+                        VALUES ($1, $2)
+                        ON CONFLICT (guild_id)
+                        DO UPDATE SET channel_id = $2
+                    `, [interaction.guild.id, channel?.id || null]);
+                    
+                    const msg = channel 
+                        ? `✅ Level-up messages will be sent in ${channel}.`
+                        : `✅ Level-up messages will be sent in the same channel.`;
+                    
+                    await interaction.reply({ content: msg, flags: 64 });
+                    
+                } else if (subcommand === 'message') {
+                    const message = interaction.options.getString('message');
+                    
+                    await db.query(`
+                        INSERT INTO levelup_config (guild_id, message)
+                        VALUES ($1, $2)
+                        ON CONFLICT (guild_id)
+                        DO UPDATE SET message = $2
+                    `, [interaction.guild.id, message]);
+                    
+                    await interaction.reply({ 
+                        content: `✅ Custom level-up message set!\nPreview: ${message.replace('{user}', interaction.user.toString()).replace('{level}', '5').replace('{xp}', '1000')}`, 
+                        flags: 64 
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        // ====== ECONOMY SYSTEM ======
+        if (commandName === 'balance') {
+            try {
+                await ensureEconomyTables();
+                const target = interaction.options.getUser('user') || interaction.user;
+                
+                const balance = await db.query(
+                    'SELECT balance, bank FROM economy_balance WHERE guild_id = $1 AND user_id = $2',
+                    [interaction.guild.id, target.id]
+                );
+                
+                const config = await db.query(
+                    'SELECT currency_symbol FROM economy_config WHERE guild_id = $1',
+                    [interaction.guild.id]
+                );
+                
+                const symbol = config.rows[0]?.currency_symbol || '🪙';
+                const bal = balance.rows[0]?.balance || 0;
+                const bank = balance.rows[0]?.bank || 0;
+                
+                const embed = {
+                    color: 0xf1c40f,
+                    title: `${target.username}'s Balance`,
+                    thumbnail: { url: target.displayAvatarURL() },
+                    fields: [
+                        { name: 'Wallet', value: `${symbol} ${bal.toLocaleString()}`, inline: true },
+                        { name: 'Bank', value: `${symbol} ${bank.toLocaleString()}`, inline: true },
+                        { name: 'Total', value: `${symbol} ${(bal + bank).toLocaleString()}`, inline: true }
+                    ]
+                };
+                
+                await interaction.reply({ embeds: [embed] });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'daily') {
+            try {
+                await ensureEconomyTables();
+                
+                const config = await db.query(
+                    'SELECT currency_symbol, daily_amount FROM economy_config WHERE guild_id = $1',
+                    [interaction.guild.id]
+                );
+                
+                const symbol = config.rows[0]?.currency_symbol || '🪙';
+                const amount = config.rows[0]?.daily_amount || 100;
+                
+                const balance = await db.query(
+                    'SELECT last_daily FROM economy_balance WHERE guild_id = $1 AND user_id = $2',
+                    [interaction.guild.id, interaction.user.id]
+                );
+                
+                const lastDaily = balance.rows[0]?.last_daily || 0;
+                const now = Date.now();
+                const dayMs = 24 * 60 * 60 * 1000;
+                
+                if (now - lastDaily < dayMs) {
+                    const remaining = dayMs - (now - lastDaily);
+                    const hours = Math.floor(remaining / (60 * 60 * 1000));
+                    const minutes = Math.floor((remaining % (60 * 60 * 1000)) / (60 * 1000));
+                    
+                    await interaction.reply({ 
+                        content: `⏰ You already claimed your daily reward! Come back in **${hours}h ${minutes}m**.`, 
+                        flags: 64 
+                    });
+                    return;
+                }
+                
+                await db.query(`
+                    INSERT INTO economy_balance (guild_id, user_id, balance, last_daily)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (guild_id, user_id)
+                    DO UPDATE SET balance = economy_balance.balance + $3, last_daily = $4
+                `, [interaction.guild.id, interaction.user.id, amount, now]);
+                
+                await interaction.reply({ content: `🎁 You claimed your daily reward of ${symbol} **${amount}**!` });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'weekly') {
+            try {
+                await ensureEconomyTables();
+                
+                const config = await db.query(
+                    'SELECT currency_symbol, weekly_amount FROM economy_config WHERE guild_id = $1',
+                    [interaction.guild.id]
+                );
+                
+                const symbol = config.rows[0]?.currency_symbol || '🪙';
+                const amount = config.rows[0]?.weekly_amount || 1000;
+                
+                const balance = await db.query(
+                    'SELECT last_weekly FROM economy_balance WHERE guild_id = $1 AND user_id = $2',
+                    [interaction.guild.id, interaction.user.id]
+                );
+                
+                const lastWeekly = balance.rows[0]?.last_weekly || 0;
+                const now = Date.now();
+                const weekMs = 7 * 24 * 60 * 60 * 1000;
+                
+                if (now - lastWeekly < weekMs) {
+                    const remaining = weekMs - (now - lastWeekly);
+                    const days = Math.floor(remaining / (24 * 60 * 60 * 1000));
+                    const hours = Math.floor((remaining % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+                    
+                    await interaction.reply({ 
+                        content: `⏰ You already claimed your weekly reward! Come back in **${days}d ${hours}h**.`, 
+                        flags: 64 
+                    });
+                    return;
+                }
+                
+                await db.query(`
+                    INSERT INTO economy_balance (guild_id, user_id, balance, last_weekly)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (guild_id, user_id)
+                    DO UPDATE SET balance = economy_balance.balance + $3, last_weekly = $4
+                `, [interaction.guild.id, interaction.user.id, amount, now]);
+                
+                await interaction.reply({ content: `🎁 You claimed your weekly reward of ${symbol} **${amount}**!` });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'pay') {
+            try {
+                await ensureEconomyTables();
+                const target = interaction.options.getUser('user');
+                const amount = interaction.options.getInteger('amount');
+                
+                if (target.id === interaction.user.id) {
+                    await interaction.reply({ content: '❌ You cannot pay yourself!', flags: 64 });
+                    return;
+                }
+                
+                if (target.bot) {
+                    await interaction.reply({ content: '❌ You cannot pay bots!', flags: 64 });
+                    return;
+                }
+                
+                const balance = await db.query(
+                    'SELECT balance FROM economy_balance WHERE guild_id = $1 AND user_id = $2',
+                    [interaction.guild.id, interaction.user.id]
+                );
+                
+                const userBalance = balance.rows[0]?.balance || 0;
+                
+                if (userBalance < amount) {
+                    await interaction.reply({ content: `❌ You don't have enough money! You have **${userBalance}**.`, flags: 64 });
+                    return;
+                }
+                
+                const config = await db.query(
+                    'SELECT currency_symbol FROM economy_config WHERE guild_id = $1',
+                    [interaction.guild.id]
+                );
+                
+                const symbol = config.rows[0]?.currency_symbol || '🪙';
+                
+                // Remove from sender
+                await db.query(`
+                    UPDATE economy_balance 
+                    SET balance = balance - $3
+                    WHERE guild_id = $1 AND user_id = $2
+                `, [interaction.guild.id, interaction.user.id, amount]);
+                
+                // Add to recipient
+                await db.query(`
+                    INSERT INTO economy_balance (guild_id, user_id, balance)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (guild_id, user_id)
+                    DO UPDATE SET balance = economy_balance.balance + $3
+                `, [interaction.guild.id, target.id, amount]);
+                
+                await interaction.reply({ content: `💸 You paid ${target} ${symbol} **${amount}**!` });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'shop') {
+            const subcommand = interaction.options.getSubcommand();
+            
+            try {
+                await ensureEconomyTables();
+                
+                if (subcommand === 'view') {
+                    const items = await db.query(
+                        'SELECT * FROM economy_shop WHERE guild_id = $1 ORDER BY id ASC',
+                        [interaction.guild.id]
+                    );
+                    
+                    if (items.rows.length === 0) {
+                        await interaction.reply({ content: '🏪 The shop is empty! Admins can add items with `/shop add`.', flags: 64 });
+                        return;
+                    }
+                    
+                    const config = await db.query(
+                        'SELECT currency_symbol FROM economy_config WHERE guild_id = $1',
+                        [interaction.guild.id]
+                    );
+                    
+                    const symbol = config.rows[0]?.currency_symbol || '🪙';
+                    
+                    const list = items.rows.map(item => 
+                        `**ID ${item.id}:** ${item.item_name} - ${symbol} ${item.item_price}\n${item.description || 'No description'}`
+                    ).join('\n\n');
+                    
+                    const embed = {
+                        color: 0x3498db,
+                        title: '🏪 Server Shop',
+                        description: list,
+                        footer: { text: 'Use /shop buy <id> to purchase' }
+                    };
+                    
+                    await interaction.reply({ embeds: [embed] });
+                    
+                } else if (subcommand === 'buy') {
+                    const itemId = interaction.options.getInteger('item_id');
+                    
+                    const item = await db.query(
+                        'SELECT * FROM economy_shop WHERE id = $1 AND guild_id = $2',
+                        [itemId, interaction.guild.id]
+                    );
+                    
+                    if (item.rows.length === 0) {
+                        await interaction.reply({ content: '❌ Item not found!', flags: 64 });
+                        return;
+                    }
+                    
+                    const itemData = item.rows[0];
+                    
+                    const balance = await db.query(
+                        'SELECT balance FROM economy_balance WHERE guild_id = $1 AND user_id = $2',
+                        [interaction.guild.id, interaction.user.id]
+                    );
+                    
+                    const userBalance = balance.rows[0]?.balance || 0;
+                    
+                    if (userBalance < itemData.item_price) {
+                        await interaction.reply({ content: `❌ You need **${itemData.item_price}** but only have **${userBalance}**!`, flags: 64 });
+                        return;
+                    }
+                    
+                    // Deduct money
+                    await db.query(
+                        'UPDATE economy_balance SET balance = balance - $3 WHERE guild_id = $1 AND user_id = $2',
+                        [interaction.guild.id, interaction.user.id, itemData.item_price]
+                    );
+                    
+                    if (itemData.item_type === 'role') {
+                        // Give role
+                        try {
+                            const member = await interaction.guild.members.fetch(interaction.user.id);
+                            await member.roles.add(itemData.item_data);
+                            
+                            await db.query(
+                                'INSERT INTO economy_inventory (guild_id, user_id, item_name) VALUES ($1, $2, $3)',
+                                [interaction.guild.id, interaction.user.id, itemData.item_name]
+                            );
+                            
+                            await interaction.reply({ content: `✅ You bought **${itemData.item_name}** and received <@&${itemData.item_data}>!` });
+                        } catch (err) {
+                            await interaction.reply({ content: `❌ Purchase failed: ${err.message}`, flags: 64 });
+                        }
+                    } else {
+                        // Add to inventory
+                        await db.query(
+                            'INSERT INTO economy_inventory (guild_id, user_id, item_name) VALUES ($1, $2, $3)',
+                            [interaction.guild.id, interaction.user.id, itemData.item_name]
+                        );
+                        
+                        await interaction.reply({ content: `✅ You bought **${itemData.item_name}**! Check `/inventory` to see it.` });
+                    }
+                    
+                } else if (subcommand === 'add') {
+                    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                        await interaction.reply({ content: '❌ You need Administrator permission!', flags: 64 });
+                        return;
+                    }
+                    
+                    const name = interaction.options.getString('name');
+                    const price = interaction.options.getInteger('price');
+                    const type = interaction.options.getString('type');
+                    const data = interaction.options.getString('data');
+                    const description = interaction.options.getString('description') || 'No description';
+                    
+                    await db.query(
+                        'INSERT INTO economy_shop (guild_id, item_name, item_price, item_type, item_data, description) VALUES ($1, $2, $3, $4, $5, $6)',
+                        [interaction.guild.id, name, price, type, data, description]
+                    );
+                    
+                    await interaction.reply({ content: `✅ Added **${name}** to the shop for **${price}**!`, flags: 64 });
+                    
+                } else if (subcommand === 'remove') {
+                    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                        await interaction.reply({ content: '❌ You need Administrator permission!', flags: 64 });
+                        return;
+                    }
+                    
+                    const itemId = interaction.options.getInteger('item_id');
+                    
+                    await db.query(
+                        'DELETE FROM economy_shop WHERE id = $1 AND guild_id = $2',
+                        [itemId, interaction.guild.id]
+                    );
+                    
+                    await interaction.reply({ content: `✅ Removed item from shop.`, flags: 64 });
+                }
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'inventory') {
+            try {
+                await ensureEconomyTables();
+                const target = interaction.options.getUser('user') || interaction.user;
+                
+                const items = await db.query(
+                    'SELECT item_name, COUNT(*) as quantity FROM economy_inventory WHERE guild_id = $1 AND user_id = $2 GROUP BY item_name',
+                    [interaction.guild.id, target.id]
+                );
+                
+                if (items.rows.length === 0) {
+                    await interaction.reply({ content: `📦 ${target.username}'s inventory is empty.`, flags: 64 });
+                    return;
+                }
+                
+                const list = items.rows.map(item => `**${item.item_name}** x${item.quantity}`).join('\n');
+                
+                const embed = {
+                    color: 0x9b59b6,
+                    title: `📦 ${target.username}'s Inventory`,
+                    description: list
+                };
+                
+                await interaction.reply({ embeds: [embed] });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'coinflip') {
+            try {
+                await ensureEconomyTables();
+                const choice = interaction.options.getString('choice');
+                const bet = interaction.options.getInteger('bet');
+                
+                const balance = await db.query(
+                    'SELECT balance FROM economy_balance WHERE guild_id = $1 AND user_id = $2',
+                    [interaction.guild.id, interaction.user.id]
+                );
+                
+                const userBalance = balance.rows[0]?.balance || 0;
+                
+                if (userBalance < bet) {
+                    await interaction.reply({ content: `❌ You don't have enough money! You have **${userBalance}**.`, flags: 64 });
+                    return;
+                }
+                
+                const config = await db.query(
+                    'SELECT currency_symbol FROM economy_config WHERE guild_id = $1',
+                    [interaction.guild.id]
+                );
+                
+                const symbol = config.rows[0]?.currency_symbol || '🪙';
+                
+                const result = Math.random() < 0.5 ? 'heads' : 'tails';
+                const won = result === choice;
+                
+                if (won) {
+                    await db.query(
+                        'UPDATE economy_balance SET balance = balance + $3 WHERE guild_id = $1 AND user_id = $2',
+                        [interaction.guild.id, interaction.user.id, bet]
+                    );
+                    
+                    await interaction.reply({ 
+                        content: `🪙 The coin landed on **${result}**!\n✅ You won ${symbol} **${bet}**!` 
+                    });
+                } else {
+                    await db.query(
+                        'UPDATE economy_balance SET balance = balance - $3 WHERE guild_id = $1 AND user_id = $2',
+                        [interaction.guild.id, interaction.user.id, bet]
+                    );
+                    
+                    await interaction.reply({ 
+                        content: `🪙 The coin landed on **${result}**!\n❌ You lost ${symbol} **${bet}**.` 
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'slots') {
+            try {
+                await ensureEconomyTables();
+                const bet = interaction.options.getInteger('bet');
+                
+                const balance = await db.query(
+                    'SELECT balance FROM economy_balance WHERE guild_id = $1 AND user_id = $2',
+                    [interaction.guild.id, interaction.user.id]
+                );
+                
+                const userBalance = balance.rows[0]?.balance || 0;
+                
+                if (userBalance < bet) {
+                    await interaction.reply({ content: `❌ You don't have enough money! You have **${userBalance}**.`, flags: 64 });
+                    return;
+                }
+                
+                const config = await db.query(
+                    'SELECT currency_symbol FROM economy_config WHERE guild_id = $1',
+                    [interaction.guild.id]
+                );
+                
+                const symbol = config.rows[0]?.currency_symbol || '🪙';
+                
+                const symbols = ['🍒', '🍋', '🍊', '🍇', '💎', '7️⃣'];
+                const slot1 = symbols[Math.floor(Math.random() * symbols.length)];
+                const slot2 = symbols[Math.floor(Math.random() * symbols.length)];
+                const slot3 = symbols[Math.floor(Math.random() * symbols.length)];
+                
+                let multiplier = 0;
+                
+                if (slot1 === slot2 && slot2 === slot3) {
+                    if (slot1 === '7️⃣') multiplier = 10;
+                    else if (slot1 === '💎') multiplier = 5;
+                    else multiplier = 3;
+                } else if (slot1 === slot2 || slot2 === slot3 || slot1 === slot3) {
+                    multiplier = 1.5;
+                }
+                
+                const winnings = Math.floor(bet * multiplier) - bet;
+                
+                if (winnings > 0) {
+                    await db.query(
+                        'UPDATE economy_balance SET balance = balance + $3 WHERE guild_id = $1 AND user_id = $2',
+                        [interaction.guild.id, interaction.user.id, winnings]
+                    );
+                    
+                    await interaction.reply({ 
+                        content: `🎰 | ${slot1} ${slot2} ${slot3} |\n✅ You won ${symbol} **${winnings}**!` 
+                    });
+                } else {
+                    await db.query(
+                        'UPDATE economy_balance SET balance = balance - $3 WHERE guild_id = $1 AND user_id = $2',
+                        [interaction.guild.id, interaction.user.id, bet]
+                    );
+                    
+                    await interaction.reply({ 
+                        content: `🎰 | ${slot1} ${slot2} ${slot3} |\n❌ You lost ${symbol} **${bet}**.` 
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'economysetup') {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                await interaction.reply({ content: '❌ You need Administrator permission!', flags: 64 });
+                return;
+            }
+            
+            const subcommand = interaction.options.getSubcommand();
+            
+            try {
+                await ensureEconomyTables();
+                
+                if (subcommand === 'currency') {
+                    const name = interaction.options.getString('name');
+                    const symbol = interaction.options.getString('symbol');
+                    
+                    await db.query(`
+                        INSERT INTO economy_config (guild_id, currency_name, currency_symbol)
+                        VALUES ($1, $2, $3)
+                        ON CONFLICT (guild_id)
+                        DO UPDATE SET currency_name = $2, currency_symbol = $3
+                    `, [interaction.guild.id, name, symbol]);
+                    
+                    await interaction.reply({ content: `✅ Currency set to **${name}** with symbol ${symbol}!`, flags: 64 });
+                    
+                } else if (subcommand === 'rewards') {
+                    const daily = interaction.options.getInteger('daily');
+                    const weekly = interaction.options.getInteger('weekly');
+                    
+                    await db.query(`
+                        INSERT INTO economy_config (guild_id, daily_amount, weekly_amount)
+                        VALUES ($1, $2, $3)
+                        ON CONFLICT (guild_id)
+                        DO UPDATE SET daily_amount = $2, weekly_amount = $3
+                    `, [interaction.guild.id, daily, weekly]);
+                    
+                    await interaction.reply({ content: `✅ Daily reward set to **${daily}** and weekly to **${weekly}**!`, flags: 64 });
+                }
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'addmoney') {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                await interaction.reply({ content: '❌ You need Administrator permission!', flags: 64 });
+                return;
+            }
+            
+            try {
+                await ensureEconomyTables();
+                const target = interaction.options.getUser('user');
+                const amount = interaction.options.getInteger('amount');
+                
+                await db.query(`
+                    INSERT INTO economy_balance (guild_id, user_id, balance)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (guild_id, user_id)
+                    DO UPDATE SET balance = economy_balance.balance + $3
+                `, [interaction.guild.id, target.id, amount]);
+                
+                await interaction.reply({ content: `✅ Added **${amount}** to ${target}'s balance.`, flags: 64 });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        // ====== ENHANCED TICKET SYSTEM ======
+        if (commandName === 'ticketpanel') {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                await interaction.reply({ content: '❌ You need Administrator permission!', flags: 64 });
+                return;
+            }
+            
+            try {
+                await ensureTicketsTable();
+                
+                // Check if ticket system is configured
+                const config = await db.query(
+                    'SELECT * FROM ticket_config WHERE guild_id = $1',
+                    [interaction.guild.id]
+                );
+                
+                if (config.rows.length === 0) {
+                    await interaction.reply({ 
+                        content: '❌ Please configure the ticket system first with `/ticketsetup`!', 
+                        flags: 64 
+                    });
+                    return;
+                }
+                
+                const channel = interaction.options.getChannel('channel');
+                const title = interaction.options.getString('title') || '🎫 Support Tickets';
+                const description = interaction.options.getString('description') || 'Click the button below to create a support ticket. Our staff will assist you shortly!';
+                
+                const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+                
+                const embed = new EmbedBuilder()
+                    .setColor(0x5865F2)
+                    .setTitle(title)
+                    .setDescription(description)
+                    .setTimestamp();
+                
+                const row = new ActionRowBuilder()
+                    .addComponents(
+                        new ButtonBuilder()
+                            .setCustomId('create_ticket')
+                            .setLabel('Create Ticket')
+                            .setEmoji('🎫')
+                            .setStyle(ButtonStyle.Primary)
+                    );
+                
+                await channel.send({ embeds: [embed], components: [row] });
+                await interaction.reply({ content: `✅ Ticket panel created in ${channel}!`, flags: 64 });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'claim') {
+            try {
+                await ensureTicketsTable();
+                
+                const ticket = await db.query(
+                    'SELECT * FROM tickets WHERE channel_id = $1 AND closed = FALSE',
+                    [interaction.channel.id]
+                );
+                
+                if (ticket.rows.length === 0) {
+                    await interaction.reply({ content: '❌ This is not a ticket channel!', flags: 64 });
+                    return;
+                }
+                
+                await interaction.channel.send(`✅ ${interaction.user} has claimed this ticket and will assist you.`);
+                await interaction.reply({ content: '✅ Ticket claimed!', flags: 64 });
+            } catch (err) {
+                console.error(err);
+                await interaction.reply({ content: '❌ Error: ' + err.message, flags: 64 });
+            }
+            return;
+        }
+
+        if (commandName === 'transcript') {
+            try {
+                await ensureTicketsTable();
+                
+                const ticket = await db.query(
+                    'SELECT * FROM tickets WHERE channel_id = $1',
+                    [interaction.channel.id]
+                );
+                
+                if (ticket.rows.length === 0) {
+                    await interaction.reply({ content: '❌ This is not a ticket channel!', flags: 64 });
+                    return;
+                }
+                
+                await interaction.deferReply({ flags: 64 });
+                
+                const messages = await interaction.channel.messages.fetch({ limit: 100 });
+                const sortedMessages = [...messages.values()].reverse();
+                
+                let transcript = `Ticket Transcript\nTicket #${ticket.rows[0].ticket_number}\nCreated: ${ticket.rows[0].created_at}\n\n`;
+                transcript += '='.repeat(50) + '\n\n';
+                
+                for (const msg of sortedMessages) {
+                    const timestamp = msg.createdAt.toLocaleString();
+                    transcript += `[${timestamp}] ${msg.author.tag}: ${msg.content}\n`;
+                    
+                    if (msg.attachments.size > 0) {
+                        msg.attachments.forEach(att => {
+                            transcript += `  [Attachment: ${att.url}]\n`;
+                        });
+                    }
+                    transcript += '\n';
+                }
+                
+                const buffer = Buffer.from(transcript, 'utf-8');
+                const { AttachmentBuilder } = require('discord.js');
+                const attachment = new AttachmentBuilder(buffer, { name: `ticket-${ticket.rows[0].ticket_number}.txt` });
+                
+                await interaction.editReply({ content: '📄 Transcript generated:', files: [attachment] });
+            } catch (err) {
+                console.error(err);
+                await interaction.editReply({ content: '❌ Error generating transcript: ' + err.message });
+            }
+            return;
+        }
+
         if (commandName === 'reactionrole') {
             const subcommand = interaction.options.getSubcommand();
             
@@ -3872,6 +4980,65 @@ app.listen(PORT, () => {
             }
             
             await db.query('INSERT INTO user_xp (user_id, xp) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET xp = user_xp.xp + $2', [message.author.id, xpToAdd]);
+            
+            // Check for level-up and rewards
+            if (message.guild) {
+                const xpResult = await db.query('SELECT xp FROM user_xp WHERE user_id = $1', [message.author.id]);
+                const totalXP = xpResult.rows[0]?.xp || 0;
+                const oldLevel = Math.floor(Math.sqrt(totalXP / 100));
+                const newLevel = Math.floor(Math.sqrt((totalXP) / 100));
+                
+                if (newLevel > oldLevel) {
+                    // Level up! Check for rewards
+                    await ensureLevelRewardsTable();
+                    
+                    const rewards = await db.query(
+                        'SELECT role_id FROM level_rewards WHERE guild_id = $1 AND level = $2',
+                        [message.guild.id, newLevel]
+                    );
+                    
+                    if (rewards.rows.length > 0) {
+                        try {
+                            const member = await message.guild.members.fetch(message.author.id);
+                            for (const reward of rewards.rows) {
+                                await member.roles.add(reward.role_id);
+                            }
+                        } catch (err) {
+                            console.error('Error adding level reward role:', err);
+                        }
+                    }
+                    
+                    // Send level-up message
+                    const levelupConfig = await db.query(
+                        'SELECT enabled, channel_id, message FROM levelup_config WHERE guild_id = $1',
+                        [message.guild.id]
+                    );
+                    
+                    const config = levelupConfig.rows[0];
+                    const enabled = config?.enabled !== false; // Default to true
+                    
+                    if (enabled) {
+                        const levelupMessage = config?.message || 'GG {user}, you leveled up to **Level {level}**! 🎉';
+                        const formattedMessage = levelupMessage
+                            .replace('{user}', `<@${message.author.id}>`)
+                            .replace('{level}', newLevel.toString())
+                            .replace('{xp}', totalXP.toString());
+                        
+                        const targetChannel = config?.channel_id 
+                            ? message.guild.channels.cache.get(config.channel_id)
+                            : message.channel;
+                        
+                        if (targetChannel) {
+                            try {
+                                await targetChannel.send(formattedMessage);
+                            } catch (err) {
+                                console.error('Error sending level-up message:', err);
+                            }
+                        }
+                    }
+                }
+            }
+            
             // Weekly XP: use week_start and reset on new week
             const weekStart = getCurrentWeekStart();
             const res = await db.query('SELECT week_start, xp FROM user_xp_weekly WHERE user_id = $1', [message.author.id]);
