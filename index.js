@@ -616,7 +616,7 @@ const commands = [
         .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
     new SlashCommandBuilder()
         .setName('nightreign')
-        .setDescription('Elden Ring: Nightreign seed finder - Find seeds for specific maps and bosses'),
+        .setDescription('🗺️ Elden Ring Nightreign seed finder - Browse maps, bosses, and item locations'),
     new SlashCommandBuilder()
         .setName('levelreward')
         .setDescription('Manage level-up role rewards')
