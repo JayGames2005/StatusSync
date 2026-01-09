@@ -1,64 +1,253 @@
-// Nightreign Seed Finder Module
+// Nightreign Seed Finder Module - Interactive Map Builder
 const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-// Seed database for Nightreign maps
-const nightreignSeeds = {
-    mountaintop: [
-        { seed: 'MTN001', bosses: ['Radahn', 'Malenia'], items: ['Sacred Relic Sword', 'Golden Seeds'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/mountainIcon.webp' },
-        { seed: 'MTN002', bosses: ['Godfrey', 'Morgott'], items: ['Marika\'s Hammer', 'Rune Arc'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/mountainIcon.webp' },
-        { seed: 'MTN003', bosses: ['Mohg', 'Fire Giant'], items: ['Mohgwyn\'s Spear', 'Ancient Dragon Stone'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/mountainIcon.webp' },
-    ],
-    noklateo: [
-        { seed: 'NOK001', bosses: ['Astel', 'Dragonlord'], items: ['Meteorite Staff', 'Dark Moon Greatsword'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/noklateoIcon.webp' },
-        { seed: 'NOK002', bosses: ['Ancestor Spirit', 'Valiant Gargoyles'], items: ['Ancestral Spirit Horn', 'Gargoyle Twinblade'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/noklateoIcon.webp' },
-        { seed: 'NOK003', bosses: ['Mimic Tear', 'Lichdragon'], items: ['Silver Tear Mask', 'Sacred Relic Sword'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/noklateoIcon.webp' },
-    ],
-    normal: [
-        { seed: 'NRM001', bosses: ['Margit', 'Godrick'], items: ['Grafted Blade', 'Golden Seed'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/normalIcon.webp' },
-        { seed: 'NRM002', bosses: ['Rennala', 'Red Wolf'], items: ['Moon Sorceries', 'Carian Knight Sword'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/normalIcon.webp' },
-        { seed: 'NRM003', bosses: ['Tree Sentinel', 'Crucible Knight'], items: ['Tree Sentinel Armor', 'Crucible Axe'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/normalIcon.webp' },
-    ],
-    rotted_woods: [
-        { seed: 'ROT001', bosses: ['Malenia', 'Scarlet Rot Dragon'], items: ['Hand of Malenia', 'Rot Incantations'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/rotIcon.webp' },
-        { seed: 'ROT002', bosses: ['Kindred of Rot', 'Cleanrot Knight'], items: ['Rot Crystal Sword', 'Cleanrot Spear'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/rotIcon.webp' },
-        { seed: 'ROT003', bosses: ['Commander O\'Neil', 'Putrid Avatar'], items: ['Commander\'s Standard', 'Putrid Crystalian'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/rotIcon.webp' },
-    ],
-    crater: [
-        { seed: 'CRT001', bosses: ['Elden Beast', 'Radagon'], items: ['Elden Remembrance', 'Sacred Relic Sword'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/craterIcon.webp' },
-        { seed: 'CRT002', bosses: ['Godskin Duo', 'Maliketh'], items: ['Black Blade', 'Godskin Peeler'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/craterIcon.webp' },
-        { seed: 'CRT003', bosses: ['Placidusax', 'Fortissax'], items: ['Dragon King Cragblade', 'Death Lightning'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/craterIcon.webp' },
-    ],
-    great_hollow: [
-        { seed: 'GHL001', bosses: ['Rykard', 'Abductor Virgins'], items: ['Blasphemous Blade', 'Magma Wyrm Scalesword'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/greatHollowIcon.webp' },
-        { seed: 'GHL002', bosses: ['Godskin Noble', 'Fire Prelate'], items: ['Godskin Stitcher', 'Prelate\'s Inferno Crozier'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/greatHollowIcon.webp' },
-        { seed: 'GHL003', bosses: ['Magma Wyrm', 'Demi-Human Queen'], items: ['Moonveil', 'Magma Shot'], image: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/greatHollowIcon.webp' },
-    ]
+// Building types available in Nightreign
+const buildingTypes = {
+    // Combat buildings
+    'forge': { name: 'Forge', emoji: '⚔️', type: 'combat', description: 'Weapon upgrades' },
+    'barracks': { name: 'Barracks', emoji: '🛡️', type: 'combat', description: 'Defensive buffs' },
+    'arena': { name: 'Arena', emoji: '⚡', type: 'combat', description: 'Combat training' },
+    
+    // Resource buildings
+    'mine': { name: 'Mine', emoji: '⛏️', type: 'resource', description: 'Ore gathering' },
+    'farm': { name: 'Farm', emoji: '🌾', type: 'resource', description: 'Food supplies' },
+    'shrine': { name: 'Shrine', emoji: '🕯️', type: 'resource', description: 'Spirit ashes' },
+    
+    // Boss buildings
+    'cathedral': { name: 'Cathedral', emoji: '⛪', type: 'boss', description: 'Holy boss spawn' },
+    'catacombs': { name: 'Catacombs', emoji: '💀', type: 'boss', description: 'Undead boss spawn' },
+    'tower': { name: 'Tower', emoji: '🗼', type: 'boss', description: 'Mage boss spawn' },
+    
+    // Special buildings
+    'merchant': { name: 'Merchant', emoji: '🏪', type: 'special', description: 'Item shop' },
+    'library': { name: 'Library', emoji: '📚', type: 'special', description: 'Spell shop' },
+    'stable': { name: 'Stable', emoji: '🐴', type: 'special', description: 'Mount upgrades' },
 };
 
+// Map slot configuration (6 slots per map)
+const mapSlots = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+// Comprehensive seed database with building positions and rewards
+const nightreignSeeds = [
+    // NORMAL MAP SEEDS
+    {
+        id: 'NRM-001',
+        mapType: 'normal',
+        buildings: { A: 'forge', B: 'barracks', C: 'mine', D: 'farm', E: 'merchant', F: 'shrine' },
+        nightlord: 'Margit the Fell Omen',
+        bosses: ['Tree Sentinel', 'Crucible Knight', 'Black Knife Assassin'],
+        items: ['Grafted Blade Greatsword', 'Golden Seed x3', 'Sacred Tear'],
+        difficulty: 'Easy',
+        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/normalIcon.webp'
+    },
+    {
+        id: 'NRM-002',
+        mapType: 'normal',
+        buildings: { A: 'arena', B: 'merchant', C: 'library', D: 'forge', E: 'farm', F: 'stable' },
+        nightlord: 'Godrick the Grafted',
+        bosses: ['Soldier of Godrick', 'Patches', 'Demi-Human Chief'],
+        items: ['Axe of Godrick', 'Remembrance of the Grafted', 'Godrick\'s Great Rune'],
+        difficulty: 'Easy',
+        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/normalIcon.webp'
+    },
+    {
+        id: 'NRM-003',
+        mapType: 'normal',
+        buildings: { A: 'catacombs', B: 'shrine', C: 'forge', D: 'barracks', E: 'mine', F: 'merchant' },
+        nightlord: 'Leonine Misbegotten',
+        bosses: ['Grafted Scion', 'Beastman of Farum Azula', 'Crucible Knight Ordovis'],
+        items: ['Grafted Blade', 'Misbegotten Twinblade', 'Golden Seed x2'],
+        difficulty: 'Medium',
+        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/normalIcon.webp'
+    },
+
+    // MOUNTAINTOP SEEDS
+    {
+        id: 'MTN-001',
+        mapType: 'mountaintop',
+        buildings: { A: 'forge', B: 'cathedral', C: 'library', D: 'barracks', E: 'mine', F: 'stable' },
+        nightlord: 'Fire Giant',
+        bosses: ['Ancient Hero of Zamor', 'Borealis', 'Death Rite Bird'],
+        items: ['Giant\'s Red Braid', 'Fire Giant Remembrance', 'Gravel Stone Seal'],
+        difficulty: 'Hard',
+        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/mountainIcon.webp'
+    },
+    {
+        id: 'MTN-002',
+        mapType: 'mountaintop',
+        buildings: { A: 'arena', B: 'tower', C: 'forge', D: 'shrine', E: 'merchant', F: 'barracks' },
+        nightlord: 'Commander Niall',
+        bosses: ['Putrid Avatar', 'Erdtree Avatar', 'Ulcerated Tree Spirit'],
+        items: ['Commander\'s Standard', 'Veteran\'s Prosthesis', 'Ancient Dragon Smithing Stone'],
+        difficulty: 'Hard',
+        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/mountainIcon.webp'
+    },
+
+    // NOKLATEO SEEDS
+    {
+        id: 'NOK-001',
+        mapType: 'noklateo',
+        buildings: { A: 'library', B: 'catacombs', C: 'shrine', D: 'merchant', E: 'forge', F: 'tower' },
+        nightlord: 'Astel, Naturalborn of the Void',
+        bosses: ['Mimic Tear', 'Valiant Gargoyle Duo', 'Dragonkin Soldier'],
+        items: ['Meteorite Staff', 'Wing of Astel', 'Nebula Spell'],
+        difficulty: 'Very Hard',
+        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/noklateoIcon.webp'
+    },
+    {
+        id: 'NOK-002',
+        mapType: 'noklateo',
+        buildings: { A: 'forge', B: 'arena', C: 'library', D: 'stable', E: 'merchant', F: 'catacombs' },
+        nightlord: 'Dragonlord Placidusax',
+        bosses: ['Ancestor Spirit', 'Crucible Knight Siluria', 'Lichdragon Fortissax'],
+        items: ['Remembrance of the Dragonlord', 'Dragon King\'s Cragblade', 'Ancient Dragon Smithing Stone x2'],
+        difficulty: 'Very Hard',
+        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/noklateoIcon.webp'
+    },
+
+    // ROTTED WOODS SEEDS
+    {
+        id: 'ROT-001',
+        mapType: 'rotted_woods',
+        buildings: { A: 'shrine', B: 'catacombs', C: 'farm', D: 'forge', E: 'library', F: 'merchant' },
+        nightlord: 'Malenia, Blade of Miquella',
+        bosses: ['Cleanrot Knight Duo', 'Kindred of Rot', 'Putrid Crystalian Trio'],
+        items: ['Hand of Malenia', 'Scarlet Aeonia', 'Malenia\'s Great Rune'],
+        difficulty: 'Extreme',
+        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/rotIcon.webp'
+    },
+    {
+        id: 'ROT-002',
+        mapType: 'rotted_woods',
+        buildings: { A: 'forge', B: 'barracks', C: 'shrine', D: 'mine', E: 'catacombs', F: 'stable' },
+        nightlord: 'Commander O\'Neil',
+        bosses: ['Putrid Avatar', 'Cleanrot Knight', 'Erdtree Burial Watchdog'],
+        items: ['Commander\'s Standard', 'Unalloyed Gold Needle', 'Rotten Crystal Sword'],
+        difficulty: 'Hard',
+        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/rotIcon.webp'
+    },
+
+    // CRATER SEEDS
+    {
+        id: 'CRT-001',
+        mapType: 'crater',
+        buildings: { A: 'cathedral', B: 'tower', C: 'forge', D: 'library', E: 'shrine', F: 'barracks' },
+        nightlord: 'Radagon & Elden Beast',
+        bosses: ['Godfrey (Hoarah Loux)', 'Sir Gideon Ofnir', 'Godskin Duo'],
+        items: ['Sacred Relic Sword', 'Elden Remembrance', 'Radagon\'s Soreseal'],
+        difficulty: 'Extreme',
+        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/craterIcon.webp'
+    },
+    {
+        id: 'CRT-002',
+        mapType: 'crater',
+        buildings: { A: 'forge', B: 'arena', C: 'merchant', D: 'cathedral', E: 'library', F: 'stable' },
+        nightlord: 'Maliketh, the Black Blade',
+        bosses: ['Beast Clergyman', 'Draconic Tree Sentinel', 'Godskin Noble'],
+        items: ['Black Blade', 'Destined Death', 'Maliketh\'s Black Blade'],
+        difficulty: 'Extreme',
+        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/craterIcon.webp'
+    },
+
+    // GREAT HOLLOW SEEDS
+    {
+        id: 'GHL-001',
+        mapType: 'great_hollow',
+        buildings: { A: 'forge', B: 'catacombs', C: 'merchant', D: 'library', E: 'shrine', F: 'tower' },
+        nightlord: 'Rykard, Lord of Blasphemy',
+        bosses: ['Godskin Noble', 'Abductor Virgin Duo', 'Magma Wyrm'],
+        items: ['Blasphemous Blade', 'Serpent-Hunter', 'Rykard\'s Great Rune'],
+        difficulty: 'Hard',
+        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/greatHollowIcon.webp'
+    },
+    {
+        id: 'GHL-002',
+        mapType: 'great_hollow',
+        buildings: { A: 'arena', B: 'forge', C: 'barracks', D: 'mine', E: 'merchant', F: 'stable' },
+        nightlord: 'God-Devouring Serpent',
+        bosses: ['Fire Prelate', 'Demi-Human Queen Maggie', 'Black Blade Kindred'],
+        items: ['Serpent Bow', 'Magma Shot', 'Gelmir Glintstone Staff'],
+        difficulty: 'Medium',
+        imageUrl: 'https://artimuz.github.io/Nightreign-Seed-Finder/Images/mapTypes/greatHollowIcon.webp'
+    },
+];
+
 const mapNames = {
-    mountaintop: 'Mountaintop',
-    noklateo: 'Noklateo',
-    normal: 'Normal',
-    rotted_woods: 'Rotted Woods',
-    crater: 'Crater',
-    great_hollow: 'Great Hollow'
+    mountaintop: 'Mountaintop of the Giants',
+    noklateo: 'Noklateo, Eternal City',
+    normal: 'Limgrave (Normal)',
+    rotted_woods: 'Caelid Rotted Woods',
+    crater: 'Crumbling Farum Azula',
+    great_hollow: 'Mt. Gelmir Great Hollow'
 };
 
 const mapDescriptions = {
-    mountaintop: 'Snowy peaks with legendary bosses',
-    noklateo: 'Underground eternal city with cosmic threats',
-    normal: 'Standard Limgrave starting area',
-    rotted_woods: 'Scarlet rot-infested swamplands',
-    crater: 'Endgame crater with final bosses',
-    great_hollow: 'Volcanic region with fire-based enemies'
+    mountaintop: 'Frozen peaks with legendary endgame bosses',
+    noklateo: 'Underground eternal city with cosmic horrors',
+    normal: 'Starting area with beginner-friendly encounters',
+    rotted_woods: 'Scarlet rot swamplands with deadly foes',
+    crater: 'Crumbling ruins with final game bosses',
+    great_hollow: 'Volcanic manor with fire-based challenges'
 };
+
+// Store active map building sessions (in-memory, can be moved to database later)
+const buildSessions = new Map(); // userId -> { mapType, selectedBuildings: {}, filters: [] }
+
+// Initialize a new map building session
+function createBuildSession(userId, mapType) {
+    buildSessions.set(userId, {
+        mapType,
+        selectedBuildings: {},
+        filters: []
+    });
+}
+
+// Get user's active session
+function getSession(userId) {
+    return buildSessions.get(userId);
+}
+
+// Update session with building selection
+function updateBuilding(userId, slot, buildingType) {
+    const session = getSession(userId);
+    if (session) {
+        session.selectedBuildings[slot] = buildingType;
+    }
+}
+
+// Clear a building slot
+function clearBuilding(userId, slot) {
+    const session = getSession(userId);
+    if (session) {
+        delete session.selectedBuildings[slot];
+    }
+}
+
+// Filter seeds based on selected buildings
+function filterSeeds(mapType, selectedBuildings) {
+    const relevantSeeds = nightreignSeeds.filter(s => s.mapType === mapType);
+    
+    if (Object.keys(selectedBuildings).length === 0) {
+        return relevantSeeds;
+    }
+    
+    return relevantSeeds.filter(seed => {
+        // Check if seed matches all selected building requirements
+        for (const [slot, building] of Object.entries(selectedBuildings)) {
+            if (seed.buildings[slot] !== building) {
+                return false;
+            }
+        }
+        return true;
+    });
+}
 
 // Create initial map selection embed
 function createMapSelectionEmbed() {
     const embed = new EmbedBuilder()
         .setColor(0xFFD700)
-        .setTitle('🗺️ Nightreign Seed Finder')
-        .setDescription('**Elden Ring: Nightreign** - Find the perfect seed for your run!\n\nSelect a map type below to see available seeds with boss and item spawns.')
+        .setTitle('🗺️ Nightreign Seed Finder - Interactive Map Builder')
+        .setDescription('**Elden Ring: Nightreign** - Build your perfect map!\n\nSelect a map type to begin building your ideal seed configuration.')
         .setImage('https://artimuz.github.io/Nightreign-Seed-Finder/Images/logo_header.webp')
         .addFields(
             { name: '🏔️ Mountaintop', value: mapDescriptions.mountaintop, inline: true },
@@ -68,7 +257,7 @@ function createMapSelectionEmbed() {
             { name: '⚡ Crater', value: mapDescriptions.crater, inline: true },
             { name: '🌋 Great Hollow', value: mapDescriptions.great_hollow, inline: true }
         )
-        .setFooter({ text: 'Based on Nightreign Seed Finder by Artimuz' })
+        .setFooter({ text: 'Interactive map builder • Based on Artimuz\'s Seed Finder' })
         .setTimestamp();
 
     return embed;
@@ -78,41 +267,41 @@ function createMapSelectionEmbed() {
 function createMapSelectMenu() {
     const selectMenu = new StringSelectMenuBuilder()
         .setCustomId('nightreign_map_select')
-        .setPlaceholder('Choose a map type...')
+        .setPlaceholder('Choose a map type to start building...')
         .addOptions([
             {
-                label: 'Mountaintop',
-                description: 'Snowy peaks with legendary bosses',
+                label: 'Mountaintop of the Giants',
+                description: 'Endgame frozen peaks',
                 value: 'mountaintop',
                 emoji: '🏔️'
             },
             {
-                label: 'Noklateo',
-                description: 'Underground eternal city',
+                label: 'Noklateo, Eternal City',
+                description: 'Underground cosmic realm',
                 value: 'noklateo',
                 emoji: '🌙'
             },
             {
-                label: 'Normal',
-                description: 'Standard Limgrave area',
+                label: 'Limgrave (Normal)',
+                description: 'Starting area',
                 value: 'normal',
                 emoji: '🌲'
             },
             {
-                label: 'Rotted Woods',
-                description: 'Scarlet rot swamplands',
+                label: 'Caelid Rotted Woods',
+                description: 'Scarlet rot wasteland',
                 value: 'rotted_woods',
                 emoji: '🍄'
             },
             {
-                label: 'Crater',
-                description: 'Endgame crater zone',
+                label: 'Crumbling Farum Azula',
+                description: 'Floating ancient ruins',
                 value: 'crater',
                 emoji: '⚡'
             },
             {
-                label: 'Great Hollow',
-                description: 'Volcanic fire region',
+                label: 'Mt. Gelmir Great Hollow',
+                description: 'Volcanic lava region',
                 value: 'great_hollow',
                 emoji: '🌋'
             }
@@ -121,117 +310,182 @@ function createMapSelectMenu() {
     return new ActionRowBuilder().addComponents(selectMenu);
 }
 
-// Create seed list for selected map
-function createSeedListEmbed(mapType) {
-    const seeds = nightreignSeeds[mapType];
-    const mapName = mapNames[mapType];
+// Create map builder interface
+function createMapBuilderEmbed(userId) {
+    const session = getSession(userId);
+    if (!session) return null;
+    
+    const { mapType, selectedBuildings } = session;
+    const matchingSeeds = filterSeeds(mapType, selectedBuildings);
+    
+    let mapLayout = '```\n';
+    mapLayout += 'MAP LAYOUT (6 Slots)\n';
+    mapLayout += '===================\n\n';
+    
+    for (const slot of mapSlots) {
+        const building = selectedBuildings[slot];
+        if (building && buildingTypes[building]) {
+            const b = buildingTypes[building];
+            mapLayout += `[${slot}] ${b.emoji} ${b.name} - ${b.description}\n`;
+        } else {
+            mapLayout += `[${slot}] ⬜ Empty Slot\n`;
+        }
+    }
+    
+    mapLayout += '\n```';
     
     const embed = new EmbedBuilder()
         .setColor(0x00D9FF)
-        .setTitle(`🗺️ ${mapName} Seeds`)
-        .setDescription(`Available seeds for **${mapName}**. Click a seed button below to see details!`)
-        .setThumbnail(seeds[0].image);
-
-    seeds.forEach((seed, index) => {
-        embed.addFields({
-            name: `${index + 1}. Seed: ${seed.seed}`,
-            value: `**Bosses:** ${seed.bosses.join(', ')}\n**Items:** ${seed.items.slice(0, 2).join(', ')}`,
-            inline: false
-        });
-    });
-
-    embed.setFooter({ text: `${seeds.length} seeds available for ${mapName}` });
-    embed.setTimestamp();
-
-    return embed;
-}
-
-// Create seed selection buttons
-function createSeedButtons(mapType) {
-    const seeds = nightreignSeeds[mapType];
-    const buttons = seeds.map((seed, index) => 
-        new ButtonBuilder()
-            .setCustomId(`nightreign_seed_${mapType}_${index}`)
-            .setLabel(seed.seed)
-            .setStyle(ButtonStyle.Primary)
-            .setEmoji('🎲')
-    );
-
-    // Add back button
-    buttons.push(
-        new ButtonBuilder()
-            .setCustomId('nightreign_back')
-            .setLabel('Back to Maps')
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji('◀️')
-    );
-
-    // Split into rows (max 5 buttons per row)
-    const rows = [];
-    for (let i = 0; i < buttons.length; i += 5) {
-        rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
-    }
-
-    return rows;
-}
-
-// Create detailed seed embed
-function createSeedDetailEmbed(mapType, seedIndex) {
-    const seed = nightreignSeeds[mapType][seedIndex];
-    const mapName = mapNames[mapType];
-    
-    const embed = new EmbedBuilder()
-        .setColor(0x32CD32)
-        .setTitle(`🎲 Seed: ${seed.seed}`)
-        .setDescription(`**Map:** ${mapName}\n\nThis seed contains specific boss encounters and item spawns for your Nightreign run.`)
-        .setThumbnail(seed.image)
+        .setTitle(`🗺️ Building: ${mapNames[mapType]}`)
+        .setDescription(`**Interactive Map Builder**\n\n${mapLayout}\n**Matching Seeds:** ${matchingSeeds.length} found`)
         .addFields(
-            { 
-                name: '⚔️ Boss Encounters', 
-                value: seed.bosses.map((b, i) => `${i + 1}. ${b}`).join('\n'), 
-                inline: true 
-            },
-            { 
-                name: '🎁 Notable Items', 
-                value: seed.items.map((item, i) => `${i + 1}. ${item}`).join('\n'), 
-                inline: true 
-            },
-            {
-                name: '📋 Seed Code',
-                value: `\`\`\`${seed.seed}\`\`\``,
-                inline: false
-            }
+            { name: '📍 Instructions', value: 'Select a slot (A-F) to place a building, then choose the building type.\nView results to see all matching seeds!', inline: false }
         )
-        .setFooter({ text: 'Copy the seed code to use in Nightreign' })
+        .setFooter({ text: `${Object.keys(selectedBuildings).length}/6 slots filled` })
         .setTimestamp();
 
     return embed;
 }
 
-// Create back button
-function createBackButton(mapType) {
-    return new ActionRowBuilder()
+// Create slot selection buttons
+function createSlotButtons() {
+    const buttons = mapSlots.map(slot => 
+        new ButtonBuilder()
+            .setCustomId(`nightreign_slot_${slot}`)
+            .setLabel(`Slot ${slot}`)
+            .setStyle(ButtonStyle.Secondary)
+    );
+    
+    const row1 = new ActionRowBuilder().addComponents(buttons.slice(0, 3));
+    const row2 = new ActionRowBuilder().addComponents(buttons.slice(3, 6));
+    
+    const row3 = new ActionRowBuilder()
         .addComponents(
             new ButtonBuilder()
-                .setCustomId(`nightreign_map_${mapType}`)
-                .setLabel(`Back to ${mapNames[mapType]}`)
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('◀️'),
+                .setCustomId('nightreign_view_results')
+                .setLabel('View Matching Seeds')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('🔍'),
+            new ButtonBuilder()
+                .setCustomId('nightreign_clear_map')
+                .setLabel('Clear Map')
+                .setStyle(ButtonStyle.Danger)
+                .setEmoji('🗑️'),
             new ButtonBuilder()
                 .setCustomId('nightreign_back')
-                .setLabel('Back to Maps')
-                .setStyle(ButtonStyle.Secondary)
+                .setLabel('Change Map')
+                .setStyle(ButtonStyle.Primary)
                 .setEmoji('🗺️')
         );
+    
+    return [row1, row2, row3];
+}
+
+// Create building type selection menu for a slot
+function createBuildingSelectMenu(slot) {
+    const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId(`nightreign_building_${slot}`)
+        .setPlaceholder(`Choose building for Slot ${slot}...`)
+        .addOptions(
+            Object.entries(buildingTypes).map(([key, data]) => ({
+                label: data.name,
+                description: data.description,
+                value: key,
+                emoji: data.emoji
+            }))
+        );
+    
+    return new ActionRowBuilder().addComponents(selectMenu);
+}
+
+// Create seed results embed
+function createResultsEmbed(userId, page = 0) {
+    const session = getSession(userId);
+    if (!session) return null;
+    
+    const { mapType, selectedBuildings } = session;
+    const matchingSeeds = filterSeeds(mapType, selectedBuildings);
+    
+    if (matchingSeeds.length === 0) {
+        return new EmbedBuilder()
+            .setColor(0xFF0000)
+            .setTitle('❌ No Matching Seeds')
+            .setDescription('No seeds found with your selected building configuration.\n\nTry removing some buildings or changing your map type.')
+            .setFooter({ text: 'Tip: Fewer building requirements = more results' });
+    }
+    
+    const seed = matchingSeeds[page];
+    
+    let buildingList = '';
+    for (const slot of mapSlots) {
+        const building = seed.buildings[slot];
+        const b = buildingTypes[building];
+        buildingList += `**${slot}:** ${b.emoji} ${b.name}\n`;
+    }
+    
+    const embed = new EmbedBuilder()
+        .setColor(0x32CD32)
+        .setTitle(`🎲 Seed: ${seed.id}`)
+        .setDescription(`**Map:** ${mapNames[mapType]}\n**Difficulty:** ${seed.difficulty}`)
+        .setThumbnail(seed.imageUrl)
+        .addFields(
+            { name: '🏗️ Building Layout', value: buildingList, inline: true },
+            { name: '👑 Nightlord Boss', value: seed.nightlord, inline: true },
+            { name: '⚔️ Additional Bosses', value: seed.bosses.join('\n'), inline: false },
+            { name: '🎁 Notable Rewards', value: seed.items.join('\n'), inline: false }
+        )
+        .setFooter({ text: `Seed ${page + 1} of ${matchingSeeds.length} • Use arrows to browse` })
+        .setTimestamp();
+
+    return embed;
+}
+
+// Create navigation buttons for results
+function createResultsButtons(userId, currentPage) {
+    const session = getSession(userId);
+    if (!session) return [];
+    
+    const { mapType, selectedBuildings } = session;
+    const matchingSeeds = filterSeeds(mapType, selectedBuildings);
+    
+    const row = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId(`nightreign_result_prev_${currentPage}`)
+                .setLabel('◀ Previous')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(currentPage === 0),
+            new ButtonBuilder()
+                .setCustomId(`nightreign_result_next_${currentPage}`)
+                .setLabel('Next ▶')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(currentPage >= matchingSeeds.length - 1),
+            new ButtonBuilder()
+                .setCustomId('nightreign_back_to_builder')
+                .setLabel('Back to Builder')
+                .setStyle(ButtonStyle.Primary)
+                .setEmoji('🔨')
+        );
+    
+    return [row];
 }
 
 module.exports = {
     nightreignSeeds,
+    buildingTypes,
     mapNames,
+    mapSlots,
+    createBuildSession,
+    getSession,
+    updateBuilding,
+    clearBuilding,
+    filterSeeds,
     createMapSelectionEmbed,
     createMapSelectMenu,
-    createSeedListEmbed,
-    createSeedButtons,
-    createSeedDetailEmbed,
-    createBackButton
+    createMapBuilderEmbed,
+    createSlotButtons,
+    createBuildingSelectMenu,
+    createResultsEmbed,
+    createResultsButtons
 };
+
